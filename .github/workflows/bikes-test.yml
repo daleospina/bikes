@@ -237,7 +237,7 @@ jobs:
 
             - name: Verify API deployment
               run: |
-                az webapp show `
+                az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
                     --name ${{ vars.AZURE_API_APPSERVICE_NAME }} \
                     --query state
@@ -251,7 +251,7 @@ jobs:
 
             - name: Verify App deployment
               run: |
-                az webapp show `
+                az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
                     --name ${{ vars.AZURE_APP_APPSERVICE_NAME }} \
                     --query state
