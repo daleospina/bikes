@@ -1,0 +1,288 @@
+name: Bikes Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "dev/**"
+    paths:
+      - "env/**"
+      - "src/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TEMPLATE_FILE: "./env/main.bicep"
+  PARAMETER_TEST_FILE: "./env/main.parameters.test.json"
+
+jobs:
+    build-infra:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Build bicep
+          run: az bicep build --file ${{ env.TEMPLATE_FILE }}
+
+        - name: Upload artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: infra
+            path: ./env/
+    
+    build-app:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                dotnet-version: '8.0.x'
+
+            - name: Restore
+              run: dotnet restore
+
+            - name: Build
+              run: dotnet build --no-restore --configuration Release
+
+            - name: Test
+              run: |
+                dotnet test --no-build --configuration Release \
+                --collect:"XPlat Code Coverage"
+
+            # - name: Publish test results
+            #   uses: actions/upload-artifact@v4
+            #   with:
+            #     name: test-results
+            #     path: |
+            #       **/TestResults/**
+
+            - name: SonarQube Scan
+              uses: SonarSource/sonarqube-scan-action@v7.0.0 # Ex: v4.1.0 or sha1, See the latest version at https://github.com/marketplace/actions/official-sonarqube-scan
+              env:
+                SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+              with:
+                projectBaseDir: ./src
+                args: >
+                    -Dsonar.organization=daleospina-gh
+                    -Dsonar.projectName=bikes
+                    -Dsonar.projectKey=bikes
+                    -Dsonar.sources=.
+                    -Dsonar.verbose=true
+
+            - name: Publish api
+              run: dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj -c Release -o publish/api
+
+            - name: Publish app
+              run: dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj -c Release -o publish/app
+
+            - name: Zip artifacts
+              run: |
+                cd publish
+                zip -r api.zip api
+                zip -r app.zip app
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                name: app
+                path: publish/*.zip
+
+    deploy-infra:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        environment: test
+        needs: [build-infra, build-app]
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Sign in to azure
+          uses: azure/login@v3
+          with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Create resource group
+          uses: azure/CLI@v2
+          with:
+            inlineScript: |
+                az group create --name  ${{ vars.AZURE_RESOURCEGROUP_NAME }} --location ${{ vars.AZURE_LOCATION_NAME }}     
+        
+        - name: Validate bicep
+          uses: azure/bicep-deploy@v2
+          with:
+            type: deployment
+            operation: validate
+            scope: resourceGroup
+            name: ${{ github.run_number }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+            template-file: ${{ env.TEMPLATE_FILE }}
+            parameters-file: ${{ env.PARAMETER_TEST_FILE }}
+
+        - name: Deploy to azure
+          id: deploy
+          uses: azure/bicep-deploy@v2
+          with:
+            type: deployment
+            operation: create
+            scope: resourceGroup
+            name: ${{ github.run_number }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+            template-file: ${{ env.TEMPLATE_FILE }}
+            parameters-file: ${{ env.PARAMETER_TEST_FILE }}
+
+        outputs:
+            appHostName: ${{ steps.deploy.outputs.appHostName }}
+            apiHostName: ${{ steps.deploy.outputs.apiHostName }}
+            sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
+            sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
+
+    deploy-database:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: deploy-infra
+        environment: test
+    
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                dotnet-version: '8.0.x'
+
+            - name: Install EF Tool
+              run: dotnet tool install --global dotnet-ef
+
+            - name: Install sqlcmd
+              run: |
+                curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+                curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
+                sudo apt-get update
+                sudo apt-get install -y sqlcmd
+
+            - name: Log in with Azure
+              uses: azure/login@v3
+              with:
+                client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Restore
+              run: dotnet restore
+
+            - name: Build
+              run: dotnet build --configuration Release --no-restore
+          
+            - name: Generate idempotent SQL script
+              run: |
+                dotnet ef migrations script \
+                --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
+                --startup-project ./src/cicloso.bikes.api/cicloso.bikes.api.csproj \
+                --idempotent \
+                --output migration.sql
+
+            - name: Run migrations on Azure SQL
+              env:
+                CONNECTION_STRING: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+              run: |
+                sqlcmd -S $(echo $CONNECTION_STRING | sed -n 's/.*Server=tcp:\([^,]*\).*/\1/p') \
+                    -d $(echo $CONNECTION_STRING | sed -n 's/.*Initial Catalog=\([^;]*\).*/\1/p') \
+                    -U $(echo $CONNECTION_STRING | sed -n 's/.*User ID=\([^;]*\).*/\1/p') \
+                    -P $(echo $CONNECTION_STRING | sed -n 's/.*Password=\([^;]*\).*/\1/p') \
+                    -i migration.sql
+    
+    deploy-app:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: deploy-infra
+        environment: test
+    
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Download artifact
+              uses: actions/download-artifact@v4
+              with:
+                name: app
+                path: artifacts
+
+            - name: Log in with Azure
+              uses: azure/login@v2
+              with:
+                client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Deploy to Api Service
+              uses: azure/webapps-deploy@v3
+              with:
+                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+                app-name: ${{ vars.AZURE_API_APPSERVICE_NAME }}
+                package: artifacts/api.zip
+
+            - name: Verify API deployment
+              run: |
+                az webapp show `
+                    --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
+                    --name ${{ vars.AZURE_API_APPSERVICE_NAME }} \
+                    --query state
+            
+            - name: Deploy to App Service
+              uses: azure/webapps-deploy@v3
+              with:
+                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+                app-name: ${{ vars.AZURE_APP_APPSERVICE_NAME }}
+                package: artifacts/app.zip
+
+            - name: Verify App deployment
+              run: |
+                az webapp show `
+                    --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
+                    --name ${{ vars.AZURE_APP_APPSERVICE_NAME }} \
+                    --query state
+
+    validate-perfomance:
+        runs-on: ubuntu-latest
+        needs: [deploy-app, deploy-database]
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Lighthouse scan
+          uses: treosh/lighthouse-ci-action@v12
+          with:
+            urls: |
+                https://app-tickets-app-test-gwjeyl.azurewebsites.net/
+                https://app-tickets-app-test-gwjeyl.azurewebsites.net/Customer
+                https://app-tickets-app-test-gwjeyl.azurewebsites.net/City
+                https://app-tickets-app-test-gwjeyl.azurewebsites.net/Theater
+            uploadArtifacts: true # save results as an action artifacts
+            temporaryPublicStorage: true # upload lighthouse report to the temporary storage
+    
+    validate-security:
+        runs-on: ubuntu-latest
+        needs: [deploy-app, deploy-database]
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: ZAP scan
+          uses: zaproxy/action-full-scan@v0.13.0
+          with:
+            target: 'https://app-tickets-app-test-gwjeyl.azurewebsites.net/'
+            allow_issue_writing: false

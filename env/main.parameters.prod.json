@@ -1,0 +1,76 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "globalLocation":{
+        "value": "global"
+      },
+      "prefix": {
+        "value": "bikes"
+      },
+      "environment": {
+        "value": "prod"
+      },
+      "resourceGroupInitName": {
+        "value": "rg-bikes-init"
+      },
+      "managedIdentityName": {
+        "value": "id-bikes-init"
+      },
+      "certificateSSL": {
+        "value": "https://kv-bikes-init.vault.azure.net/secrets/certificateSSLFile/57266472ada74269867e1ea2d364635e"
+      },
+      "workSpaceSkuName": {
+        "value": "PerGB2018"
+      },
+      "appServicePlanSkuName": {
+        "value": "B1"
+      },
+      "sqlServerAdminUser": {
+        "reference": {
+          "keyVault": {
+            "id": "/subscriptions/4db78a78-3084-43d5-a503-3486f0427890/resourceGroups/rg-bikes-init/providers/Microsoft.KeyVault/vaults/kv-bikes-init"
+          },
+          "secretName": "sqlServerAdministratorLogin"
+        }
+      },
+      "sqlServerAdminPassword": {
+        "reference": {
+          "keyVault": {
+            "id": "/subscriptions/4db78a78-3084-43d5-a503-3486f0427890/resourceGroups/rg-bikes-init/providers/Microsoft.KeyVault/vaults/kv-bikes-init"
+          },
+          "secretName": "sqlServerAdministratorPassword"
+        }
+      },
+      "sqlServerAdminLogin": {
+        "value": "APP_AAD_TechnicalGovernance_ApplicationServices_Members"
+      },
+      "sqlServerAdminSID": {
+        "value": "47b9bfba-1d76-41b3-b295-186981d614dc"
+      },
+      "sqlServerAdminType": {
+        "value": "Group"
+      },
+      "sqlDataBaseSkuName": {
+        "value": "Basic"
+      },
+      "storageAccountSkuName": {
+        "value": "Standard_LRS"
+      },
+      "publicIPAddressSkuName": {
+        "value": "Standard"
+      },
+      "publicIPAddressVersion": {
+        "value": "IPv4"
+      },
+      "publicIPAllocationMethod": {
+        "value": "Static"
+      },
+      "applicationGateWaySkuName": {
+        "value": "Standard_v2"
+      },
+      "virtualNetworkSegment": {
+        "value": 2
+      }
+    }
+  }

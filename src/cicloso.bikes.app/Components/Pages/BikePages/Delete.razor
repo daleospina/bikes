@@ -1,0 +1,64 @@
+﻿@page "/bikes/delete"
+@using Microsoft.EntityFrameworkCore
+@using cicloso.bikes.core.Models
+@using cicloso.bikes.core.Data
+@inject IDbContextFactory<cicloso.bikes.core.Data.BikesContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Delete</PageTitle>
+
+<h1>Delete</h1>
+
+<p>Are you sure you want to delete this?</p>
+<div>
+    <h2>Bike</h2>
+    <hr />
+    @if (bike is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Brand</dt>
+            <dd class="col-sm-10">@bike.Brand</dd>
+        </dl>
+        <dl class="row">
+            <dt class="col-sm-2">Model</dt>
+            <dd class="col-sm-10">@bike.Model</dd>
+        </dl>
+        <dl class="row">
+            <dt class="col-sm-2">Image</dt>
+            <dd class="col-sm-10"><img src="@($"/api/images/{bike.Image}")" style="height:150px; width: 150px;" /></dd>
+        </dl>
+        <EditForm method="post" Model="bike" OnValidSubmit="DeleteBike" FormName="delete" Enhance>
+            <button type="submit" class="btn btn-danger" disabled="@(bike is null)">Delete</button> |
+            <a href="/bikes">Back to List</a>
+        </EditForm>
+    }
+</div>
+
+@code {
+    private Bike? bike;
+
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        bike = await context.Bikes.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (bike is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+        }
+    }
+
+    private async Task DeleteBike()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Bikes.Remove(bike!);
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/bikes");
+    }
+}

@@ -1,0 +1,61 @@
+﻿@page "/bikes/details"
+@using Microsoft.EntityFrameworkCore
+@using cicloso.bikes.core.Models
+@using cicloso.bikes.core.Data
+@inject IDbContextFactory<cicloso.bikes.core.Data.BikesContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Details</PageTitle>
+
+<h1>Details</h1>
+
+<div>
+    <h2>Bike</h2>
+    <hr />
+    @if (bike is null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else {
+        <dl class="row">
+            <dt class="col-sm-2">Brand</dt>
+            <dd class="col-sm-10">@bike.Brand</dd>
+            <dt class="col-sm-2">Model</dt>
+            <dd class="col-sm-10">@bike.Model</dd>
+            <dt class="col-sm-2">Fork</dt>
+            <dd class="col-sm-10">@bike.Fork</dd>
+            <dt class="col-sm-2">Groupset</dt>
+            <dd class="col-sm-10">@bike.Groupset</dd>
+            <dt class="col-sm-2">Brakes</dt>
+            <dd class="col-sm-10">@bike.Brakes</dd>
+            <dt class="col-sm-2">Price</dt>
+            <dd class="col-sm-10">@bike.Price</dd>
+            <dt class="col-sm-2">Notes</dt>
+            <dd class="col-sm-10">@bike.Notes</dd>
+            <dt class="col-sm-2">Image</dt>
+            <dd class="col-sm-10"><img src="@($"/api/images/{bike.Image}")" style="height:150px; width: 150px;" /></dd>
+        </dl>
+        <div>
+            <a href="@($"/bikes/edit?id={bike.Id}")">Edit</a> |
+            <a href="@($"/bikes")">Back to List</a>
+        </div>
+    }
+</div>
+
+@code {
+    private Bike? bike;
+
+    [SupplyParameterFromQuery]
+    private int Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = DbFactory.CreateDbContext();
+        bike = await context.Bikes.FirstOrDefaultAsync(m => m.Id == Id);
+
+        if (bike is null)
+        {
+            NavigationManager.NavigateTo("notfound");
+        }
+    }
+}

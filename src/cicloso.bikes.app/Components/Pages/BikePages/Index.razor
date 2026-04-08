@@ -1,0 +1,58 @@
+﻿@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using cicloso.bikes.core.Models
+@using cicloso.bikes.core.Data
+
+
+@page "/bikes"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+@inject IDbContextFactory<cicloso.bikes.core.Data.BikesContext> DbFactory
+
+<PageTitle>Index</PageTitle>
+
+<h1>Index</h1>
+
+<p>
+    <input type="search" @bind="filter" @bind:event="oninput" />
+</p>
+
+<p>
+    <a href="bikes/create">Create New</a>
+</p>
+
+<QuickGrid Class="table" Items="FilteredBikes" Pagination="pagination">
+    <PropertyColumn Property="bike => bike.Brand" Sortable="true" />
+    <PropertyColumn Property="bike => bike.Model" Sortable="true" />
+    <PropertyColumn Property="bike => bike.Price" Sortable="true" />
+    <TemplateColumn Context="bike">
+        <img src="@($"/api/images/{bike.Image}")" style="height:150px; width: 150px;" />
+    </TemplateColumn>
+    <TemplateColumn Context="bike">
+        <a href="@($"{bike.Url}")" target="_blank">More</a> |
+        <a href="@($"bikes/details?id={bike.Id}")">Details</a> |
+        <a href="@($"bikes/edit?id={bike.Id}")">Edit</a> |
+        <a href="@($"bikes/delete?id={bike.Id}")">Delete</a>
+    </TemplateColumn>
+</QuickGrid>
+<Paginator State="pagination" />
+
+@code {
+    private BikesContext context = default!;
+    private PaginationState pagination = new PaginationState { ItemsPerPage = 5 };
+
+    protected override void OnInitialized()
+    {
+        context = DbFactory.CreateDbContext();
+    }
+
+    public async ValueTask DisposeAsync() => await context.DisposeAsync();
+
+    private string filter = string.Empty;
+
+    private IQueryable<Bike> FilteredBikes =>
+        context.Bikes.Where(item => item.Brand!.Contains(filter)
+                                    || item.Model!.Contains(filter));
+
+    
+}

@@ -1,0 +1,85 @@
+﻿@page "/bikes/create"
+@using Microsoft.EntityFrameworkCore
+@using cicloso.bikes.core.Models
+@using cicloso.bikes.core.Data
+@inject IDbContextFactory<cicloso.bikes.core.Data.BikesContext> DbFactory
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create</PageTitle>
+
+<h1>Create</h1>
+
+<h2>Bike</h2>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        <EditForm method="post" Model="Bike" OnValidSubmit="AddBike" FormName="create" Enhance>
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" />
+            <div class="mb-3">
+                <label for="brand" class="form-label">Brand:</label> 
+                <InputText id="brand" @bind-Value="Bike.Brand" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Brand" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="model" class="form-label">Model:</label> 
+                <InputText id="model" @bind-Value="Bike.Model" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Model" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="fork" class="form-label">Fork:</label> 
+                <InputText id="fork" @bind-Value="Bike.Fork" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Fork" class="text-danger" /> 
+            </div>        
+            <div class="mb-3">
+                <label for="groupset" class="form-label">Groupset:</label> 
+                <InputText id="groupset" @bind-Value="Bike.Groupset" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Groupset" class="text-danger" /> 
+            </div>
+            <div class="mb-3">
+                <label for="brakes" class="form-label">Brakes:</label> 
+                <InputText id="brakes" @bind-Value="Bike.Brakes" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Brakes" class="text-danger" /> 
+            </div>  
+            <div class="mb-3">
+                <label for="price" class="form-label">Price:</label> 
+                <InputNumber id="price" @bind-Value="Bike.Price" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Price" class="text-danger" /> 
+            </div> 
+             <div class="mb-3">
+                <label for="notes" class="form-label">Notes:</label> 
+                <InputText id="notes" @bind-Value="Bike.Notes" class="form-control" /> 
+                <ValidationMessage For="() => Bike.Notes" class="text-danger" /> 
+            </div>
+            <div class="mb-3">
+                <label for="url" class="form-label">Url:</label>
+                <InputText id="url" @bind-Value="Bike.Url" class="form-control" />
+                <ValidationMessage For="() => Bike.Url" class="text-danger" />
+            </div>
+            <div class="mb-3">
+                <label for="url" class="form-label">Image:</label>
+                <InputText id="url" @bind-Value="Bike.Image" class="form-control" />
+                <ValidationMessage For="() => Bike.Image" class="text-danger" />
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary">Create</button> |
+                <a href="/bikes">Back to List</a>
+            </div>
+            
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    private Bike Bike { get; set; } = new();
+
+    // To protect from overposting attacks, see https://learn.microsoft.com/aspnet/core/blazor/forms/#mitigate-overposting-attacks.
+    private async Task AddBike()
+    {
+        using var context = DbFactory.CreateDbContext();
+        context.Bikes.Add(Bike);
+        await context.SaveChangesAsync();
+        NavigationManager.NavigateTo("/bikes");
+    }
+}
