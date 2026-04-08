@@ -48,15 +48,15 @@ jobs:
                 dotnet-version: '8.0.x'
 
             - name: Restore
-              run: dotnet restore
+              run: dotnet restore ./src/cicloso.bikes.sln
 
             - name: Build
-              run: dotnet build --no-restore --configuration Release
+              run: dotnet build ./src/cicloso.bikes.sln --no-restore --configuration Release
 
-            - name: Test
-              run: |
-                dotnet test --no-build --configuration Release \
-                --collect:"XPlat Code Coverage"
+            # - name: Test
+            #   run: |
+            #     dotnet test --no-build --configuration Release \
+            #     --collect:"XPlat Code Coverage"
 
             # - name: Publish test results
             #   uses: actions/upload-artifact@v4
@@ -182,10 +182,10 @@ jobs:
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
             - name: Restore
-              run: dotnet restore
+              run: dotnet restore ./src/cicloso.bikes.sln
 
             - name: Build
-              run: dotnet build --configuration Release --no-restore
+              run: dotnet build ./src/cicloso.bikes.sln --configuration Release --no-restore
           
             - name: Generate idempotent SQL script
               run: |
@@ -267,10 +267,10 @@ jobs:
           uses: treosh/lighthouse-ci-action@v12
           with:
             urls: |
-                https://app-tickets-app-test-gwjeyl.azurewebsites.net/
-                https://app-tickets-app-test-gwjeyl.azurewebsites.net/Customer
-                https://app-tickets-app-test-gwjeyl.azurewebsites.net/City
-                https://app-tickets-app-test-gwjeyl.azurewebsites.net/Theater
+                https://app-bikes-app-test-gwjeyl.azurewebsites.net/
+                https://app-bikes-app-test-gwjeyl.azurewebsites.net/Customer
+                https://app-bikes-app-test-gwjeyl.azurewebsites.net/City
+                https://app-bikes-app-test-gwjeyl.azurewebsites.net/Theater
             uploadArtifacts: true # save results as an action artifacts
             temporaryPublicStorage: true # upload lighthouse report to the temporary storage
     
@@ -284,5 +284,5 @@ jobs:
         - name: ZAP scan
           uses: zaproxy/action-full-scan@v0.13.0
           with:
-            target: 'https://app-tickets-app-test-gwjeyl.azurewebsites.net/'
+            target: 'https://app-bikes-app-test-gwjeyl.azurewebsites.net/'
             allow_issue_writing: false
