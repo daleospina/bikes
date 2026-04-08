@@ -82,13 +82,13 @@ jobs:
               run: dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj -c Release -o publish/api
 
             - name: Publish app
-              run: dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj -c Release -o publish/app
+              run: dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj -c Release -o publish/portal
 
             - name: Zip artifacts
               run: |
                 cd publish
                 zip -r api.zip api
-                zip -r app.zip app
+                zip -r portal.zip portal
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
@@ -191,7 +191,7 @@ jobs:
               run: |
                 dotnet ef migrations script \
                 --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
-                --startup-project ./src/cicloso.bikes.api/cicloso.bikes.api.csproj \
+                --startup-project ./src/cicloso.bikes.api/cicloso.bikes.app.csproj \
                 --idempotent \
                 --output migration.sql
 
@@ -246,14 +246,14 @@ jobs:
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
-                app-name: ${{ vars.AZURE_APP_APPSERVICE_NAME }}
-                package: artifacts/app.zip
+                app-name: ${{ vars.AZURE_PORTAL_APPSERVICE_NAME }}
+                package: artifacts/portal.zip
 
             - name: Verify App deployment
               run: |
                 az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                    --name ${{ vars.AZURE_APP_APPSERVICE_NAME }} \
+                    --name ${{ vars.AZURE_PORTAL_APPSERVICE_NAME }} \
                     --query state
 
     validate-perfomance:
