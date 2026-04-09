@@ -194,7 +194,7 @@ jobs:
                 --idempotent \
                 --output migration.sql
               env:
-                BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+                BikesContext: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
 
             - name: Run migrations on Azure SQL
               run: |
@@ -204,7 +204,7 @@ jobs:
                     -P $(echo $CONNECTION_STRING | sed -n 's/.*Password=\([^;]*\).*/\1/p') \
                     -i migration.sql
               env:
-                ConnectionStrings__BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+                ConnectionStrings__BikesContext: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
     
     deploy-app:
         runs-on: ubuntu-latest
