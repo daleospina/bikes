@@ -193,16 +193,18 @@ jobs:
                 --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
                 --idempotent \
                 --output migration.sql
+              env:
+                BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
 
             - name: Run migrations on Azure SQL
-              env:
-                ConnectionStrings__BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
               run: |
                 sqlcmd -S $(echo $CONNECTION_STRING | sed -n 's/.*Server=tcp:\([^,]*\).*/\1/p') \
                     -d $(echo $CONNECTION_STRING | sed -n 's/.*Initial Catalog=\([^;]*\).*/\1/p') \
                     -U $(echo $CONNECTION_STRING | sed -n 's/.*User ID=\([^;]*\).*/\1/p') \
                     -P $(echo $CONNECTION_STRING | sed -n 's/.*Password=\([^;]*\).*/\1/p') \
                     -i migration.sql
+              env:
+                ConnectionStrings__BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
     
     deploy-app:
         runs-on: ubuntu-latest
