@@ -9,20 +9,22 @@ public class BikesContextFactory : IDesignTimeDbContextFactory<BikesContext>
 {
     public BikesContext CreateDbContext(string[] args)
     {
-        var basePath = Path.GetFullPath(
-            Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "cicloso.bikes.api")
-        );
+        var root = Directory.GetCurrentDirectory();
+
+        var appSettingsPath = Directory
+            .GetFiles(root, "appsettings.json", SearchOption.AllDirectories)
+            .First(path => path.Contains("cicloso.bikes.api"));
 
         var configuration = new ConfigurationBuilder()
-            .SetBasePath(basePath)
+            .SetBasePath(Path.GetDirectoryName(appSettingsPath)!)
             .AddJsonFile("appsettings.json", optional: false)
             .AddEnvironmentVariables()
             .Build();
 
         var optionsBuilder = new DbContextOptionsBuilder<BikesContext>();
-        var connectionString = configuration.GetConnectionString("BikesContext");
-
-        optionsBuilder.UseSqlServer(connectionString);
+        optionsBuilder.UseSqlServer(
+            configuration.GetConnectionString("BikesContext")
+        );
 
         return new BikesContext(optionsBuilder.Options);
     }
