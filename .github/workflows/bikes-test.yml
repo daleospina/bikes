@@ -191,13 +191,12 @@ jobs:
               run: |
                 dotnet ef migrations script \
                 --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
-                --startup-project ./src/cicloso.bikes.api/cicloso.bikes.app.csproj \
                 --idempotent \
                 --output migration.sql
 
             - name: Run migrations on Azure SQL
               env:
-                CONNECTION_STRING: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+                ConnectionStrings__BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
               run: |
                 sqlcmd -S $(echo $CONNECTION_STRING | sed -n 's/.*Server=tcp:\([^,]*\).*/\1/p') \
                     -d $(echo $CONNECTION_STRING | sed -n 's/.*Initial Catalog=\([^;]*\).*/\1/p') \
