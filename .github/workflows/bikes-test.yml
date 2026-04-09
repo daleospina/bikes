@@ -197,7 +197,7 @@ jobs:
                   /p:BlockOnPossibleDataLoss=false \
                   /p:CommandTimeout=1200
               env:
-                CONNECTION_STRING: ${{ secrets.SQL_CONNECTION_STRING }}
+                CONNECTION_STRING: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
     
     deploy-app:
         runs-on: ubuntu-latest
