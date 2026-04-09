@@ -198,7 +198,7 @@ jobs:
 
             - name: Run migrations on Azure SQL
               run: |
-                sqlcmd -C -N -S "$CONNECTION_STRING" -i migration.sql
+                sqlcmd -S "$CONNECTION_STRING" -i migration.sql
               env:
                 CONNECTION_STRING: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
     
