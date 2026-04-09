@@ -9,18 +9,17 @@ public class BikesContextFactory : IDesignTimeDbContextFactory<BikesContext>
 {
     public BikesContext CreateDbContext(string[] args)
     {
-        var basePath = Directory.GetCurrentDirectory();
+        var basePath = Path.GetFullPath(
+            Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "cicloso.bikes.api")
+        );
 
-        // EF se ejecuta desde la raíz del repo en CI
         var configuration = new ConfigurationBuilder()
             .SetBasePath(basePath)
-            .AddJsonFile("src/cicloso.bikes.api/appsettings.json", optional: false)
-            .AddJsonFile("src/cicloso.bikes.api/appsettings.Development.json", optional: true)
+            .AddJsonFile("appsettings.json", optional: false)
             .AddEnvironmentVariables()
             .Build();
 
         var optionsBuilder = new DbContextOptionsBuilder<BikesContext>();
-
         var connectionString = configuration.GetConnectionString("BikesContext");
 
         optionsBuilder.UseSqlServer(connectionString);
