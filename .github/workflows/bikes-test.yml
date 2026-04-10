@@ -91,7 +91,7 @@ jobs:
               run: |
                 echo "Len: ${#BikesContext}"
               env:
-                BikesContext: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
+                BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
 
             - name: Bundle database 
               run: | 
