@@ -89,8 +89,8 @@ jobs:
 
             - name: Bundle database 
               run: | 
-                dotnet ef migrations bundle \ 
-                -r linux-x64 \ 
+                dotnet ef migrations bundle \
+                -r linux-x64 \
                 --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj
 
             - name: Publish api
