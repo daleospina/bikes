@@ -206,7 +206,7 @@ jobs:
             - name: Migrate database 
               shell: bash 
               run: |  
-                chmod +x ./artifacts/efbundle/efbundle 
+                chmod +x ./artifacts/database/efbundle 
                 ./artifacts/database/efbundle --connection "${{ vars.AZURE_SQL_CONNECTION_STRING }}"
 
             - name: Deploy api
