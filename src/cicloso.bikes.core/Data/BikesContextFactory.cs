@@ -9,9 +9,18 @@ public class BikesContextFactory : IDesignTimeDbContextFactory<BikesContext>
 {
     public BikesContext CreateDbContext(string[] args)
     {
-        var connectionString =
-        args.FirstOrDefault(a => a.StartsWith("--connection="))?.Split('=')[1]
-        ?? Environment.GetEnvironmentVariable("BikesContext");
+        string? connectionString = null;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--connection" && i + 1 < args.Length)
+            {
+                connectionString = args[i + 1];
+                break;
+            }
+        }
+
+        connectionString ??= Environment.GetEnvironmentVariable("BikesContext");
 
         if (string.IsNullOrEmpty(connectionString))
             throw new Exception("No connection string provided.");
