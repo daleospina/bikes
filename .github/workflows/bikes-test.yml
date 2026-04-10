@@ -90,8 +90,10 @@ jobs:
             - name: Bundle database 
               run: | 
                 dotnet ef migrations bundle \
-                -r linux-x64 \
-                --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj
+                --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
+                -r linux-x64
+              env:
+                BikesContext: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
 
             - name: Publish api
               run: |
