@@ -84,7 +84,7 @@ jobs:
                     -Dsonar.organization=daleospina-gh
                     -Dsonar.projectName=bikes
                     -Dsonar.projectKey=bikes
-                    -Dsonar.sources=./src
+                    -Dsonar.sources=.
                     -Dsonar.verbose=true
 
             - name: Bundle database 
