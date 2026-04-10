@@ -87,6 +87,12 @@ jobs:
                     -Dsonar.sources=.
                     -Dsonar.verbose=true
 
+            - name: Log connection string length
+              run: |
+                echo "Len: ${#BikesContext}"
+              env:
+                BikesContext: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
+
             - name: Bundle database 
               run: | 
                 dotnet ef migrations bundle \
