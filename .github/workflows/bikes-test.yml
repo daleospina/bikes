@@ -191,8 +191,10 @@ jobs:
             - name: Download artifact
               uses: actions/download-artifact@v4
               with:
-                name: site
                 path: artifacts
+
+            - name: Display structure of downloaded files
+              run: ls -R
 
             - name: Log in with Azure
               uses: azure/login@v2
@@ -205,7 +207,7 @@ jobs:
               shell: bash 
               run: |  
                 chmod +x ./artifacts/efbundle/efbundle 
-                ./artifacts/efbundle/efbundle --connection "${{ vars.AZURE_SQL_CONNECTION_STRING }}"
+                ./artifacts/database/efbundle --connection "${{ vars.AZURE_SQL_CONNECTION_STRING }}"
 
             - name: Deploy api
               uses: azure/webapps-deploy@v3
