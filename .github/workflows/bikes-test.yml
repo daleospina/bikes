@@ -25,16 +25,16 @@ jobs:
         - name: Checkout code
           uses: actions/checkout@v4
 
-        - name: Build bicep
+        - name: Build
           run: az bicep build --file ${{ env.TEMPLATE_FILE }}
 
-        - name: Upload artifact
+        - name: Upload
           uses: actions/upload-artifact@v4
           with:
             name: infra
             path: ./env/
     
-    build-app:
+    build-site:
         runs-on: ubuntu-latest
         timeout-minutes: 30
 
@@ -47,11 +47,20 @@ jobs:
               with:
                 dotnet-version: '8.0.x'
 
+            - name: Setup EF
+              run: |
+                dotnet tool install --global dotnet-ef
+                dotnet tool restore
+
             - name: Restore
-              run: dotnet restore ./src/cicloso.bikes.sln
+              run: |
+                dotnet restore ./src/cicloso.bikes.sln
 
             - name: Build
-              run: dotnet build ./src/cicloso.bikes.sln --no-restore --configuration Release
+              run: |
+                dotnet build ./src/cicloso.bikes.sln \
+                --no-restore \
+                --configuration Release
 
             # - name: Test
             #   run: |
@@ -65,7 +74,7 @@ jobs:
             #     path: |
             #       **/TestResults/**
 
-            - name: SonarQube Scan
+            - name: Scan
               uses: SonarSource/sonarqube-scan-action@v7.0.0 # Ex: v4.1.0 or sha1, See the latest version at https://github.com/marketplace/actions/official-sonarqube-scan
               env:
                 SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -75,32 +84,50 @@ jobs:
                     -Dsonar.organization=daleospina-gh
                     -Dsonar.projectName=bikes
                     -Dsonar.projectKey=bikes
-                    -Dsonar.sources=.
+                    -Dsonar.sources=./src
                     -Dsonar.verbose=true
 
+            - name: Bundle database 
+              run: | 
+                dotnet ef migrations bundle \ 
+                -r linux-x64 \ 
+                --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj
+
             - name: Publish api
-              run: dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj -c Release -o publish/api
+              run: |
+                dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj \
+                -c Release \
+                -o publish/api
 
             - name: Publish app
-              run: dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj -c Release -o publish/portal
+              run: |
+                dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj \
+                -c Release \
+                -o publish/app
 
-            - name: Zip artifacts
+            - name: Zip site
               run: |
                 cd publish
                 zip -r api.zip api
-                zip -r portal.zip portal
+                zip -r app.zip app
 
-            - name: Upload artifact
+            - name: Upload database
               uses: actions/upload-artifact@v4
               with:
-                name: app
+                name: database
+                path: ./efbundle
+
+            - name: Upload site
+              uses: actions/upload-artifact@v4
+              with:
+                name: site
                 path: publish/*.zip
 
     deploy-infra:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         environment: test
-        needs: [build-infra, build-app]
+        needs: [build-infra, build-site]
         steps:
         - name: Checkout code
           uses: actions/checkout@v4
@@ -148,63 +175,13 @@ jobs:
             apiHostName: ${{ steps.deploy.outputs.apiHostName }}
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
-
-    deploy-database:
+    
+    deploy-site:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         needs: deploy-infra
         environment: test
-    
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-            
-            - name: Setup .NET
-              uses: actions/setup-dotnet@v4
-              with:
-                dotnet-version: '8.0.x'
 
-            - name: Install EF Tool
-              run: dotnet tool install --global dotnet-ef
-
-            - name: Install SqlPackage
-              run: |
-                wget https://aka.ms/sqlpackage-linux -O sqlpackage.zip
-                unzip sqlpackage.zip -d sqlpackage
-                chmod +x sqlpackage/sqlpackage
-
-            - name: Restore
-              run: dotnet restore ./src/cicloso.bikes.sln
-
-            - name: Build
-              run: dotnet build ./src/cicloso.bikes.sln --configuration Release --no-restore
-          
-            - name: Generate idempotent SQL script
-              run: |
-                dotnet ef migrations script \
-                --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
-                --idempotent \
-                --output migration.sql
-              env:
-                BikesContext: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
-
-            - name: Apply migrations script
-              run: |
-                ./sqlpackage/sqlpackage \
-                  /Action:Publish \
-                  /SourceFile:migration.sql \
-                  /TargetConnectionString:"$CONNECTION_STRING" \
-                  /p:BlockOnPossibleDataLoss=false \
-                  /p:CommandTimeout=1200
-              env:
-                CONNECTION_STRING: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
-    
-    deploy-app:
-        runs-on: ubuntu-latest
-        timeout-minutes: 30
-        needs: deploy-infra
-        environment: test
-    
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
@@ -212,7 +189,7 @@ jobs:
             - name: Download artifact
               uses: actions/download-artifact@v4
               with:
-                name: app
+                name: site
                 path: artifacts
 
             - name: Log in with Azure
@@ -222,32 +199,38 @@ jobs:
                 tenant-id: ${{ secrets.AZURE_TENANT_ID }}
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-            - name: Deploy to Api Service
+            - name: Migrate database 
+              shell: bash 
+              run: |  
+                chmod +x ./artifacts/efbundle/efbundle 
+                ./artifacts/efbundle/efbundle --connection "${{ vars.AZURE_SQL_CONNECTION_STRING }}"
+
+            - name: Deploy api
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ vars.AZURE_API_APPSERVICE_NAME }}
                 package: artifacts/api.zip
 
-            - name: Verify API deployment
+            - name: Verify api
               run: |
                 az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
                     --name ${{ vars.AZURE_API_APPSERVICE_NAME }} \
                     --query state
             
-            - name: Deploy to App Service
+            - name: Deploy app
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
-                app-name: ${{ vars.AZURE_PORTAL_APPSERVICE_NAME }}
-                package: artifacts/portal.zip
+                app-name: ${{ vars.AZURE_APP_APPSERVICE_NAME }}
+                package: artifacts/app.zip
 
-            - name: Verify App deployment
+            - name: Verify app
               run: |
                 az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                    --name ${{ vars.AZURE_PORTAL_APPSERVICE_NAME }} \
+                    --name ${{ vars.AZURE_APP_APPSERVICE_NAME }} \
                     --query state
 
     validate-perfomance:
