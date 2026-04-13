@@ -109,11 +109,15 @@ jobs:
                 -o publish/app \
                 --self-contained false
 
-            - name: Zip site
+            - name: Zip api
               run: |
-                cd publish
-                zip -r api.zip api
-                zip -r app.zip app
+                cd publish/api
+                zip -r ../../api.zip .
+
+            - name: Zip app
+              run: |
+                cd publish/app
+                zip -r ../../app.zip .
 
             - name: Upload database
               uses: actions/upload-artifact@v4
