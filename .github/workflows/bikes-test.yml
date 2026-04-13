@@ -225,7 +225,7 @@ jobs:
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ vars.AZURE_API_APPSERVICE_NAME }}
-                package: artifacts/api.zip
+                package: artifacts/site/api.zip
 
             - name: Verify api
               run: |
@@ -239,7 +239,7 @@ jobs:
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ vars.AZURE_APP_APPSERVICE_NAME }}
-                package: artifacts/app.zip
+                package: artifacts/site/app.zip
 
             - name: Verify app
               run: |
