@@ -99,13 +99,15 @@ jobs:
               run: |
                 dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj \
                 -c Release \
-                -o publish/api
+                -o publish/api \
+                --self-contained false
 
             - name: Publish app
               run: |
                 dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj \
                 -c Release \
-                -o publish/app
+                -o publish/app \
+                --self-contained false
 
             - name: Zip site
               run: |
