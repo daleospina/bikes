@@ -13,14 +13,13 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  TEMPLATE_FILE: "./env/main.bicep"
-  PARAMETER_TEST_FILE: "./env/main.parameters.test.json"
-
 jobs:
     build-infra:
         runs-on: ubuntu-latest
         timeout-minutes: 30
+        env:
+          TEMPLATE_FILE: "./env/main.bicep"
+          
         steps:
         - name: Checkout code
           uses: actions/checkout@v4
@@ -34,7 +33,7 @@ jobs:
             name: infra
             path: ./env/
     
-    build-site:
+    build-solution:
         runs-on: ubuntu-latest
         timeout-minutes: 30
 
@@ -99,15 +98,13 @@ jobs:
               run: |
                 dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj \
                 -c Release \
-                -o publish/api \
-                --self-contained false
+                -o publish/api
 
             - name: Publish app
               run: |
                 dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj \
                 -c Release \
-                -o publish/app \
-                --self-contained false
+                -o publish/app
 
             - name: Zip api
               run: |
@@ -135,10 +132,17 @@ jobs:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         environment: test
-        needs: [build-infra, build-site]
+        needs: [build-infra, build-solution]
+        env:
+            TEMPLATE_FILE: "./artifacts/infra/main.bicep"
+            PARAMETER_TEST_FILE: "./artifacts/infra/main.parameters.test.json"
+        
         steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
+        - name: Download artifact
+          uses: actions/download-artifact@v4
+          with:
+            name: infra
+            path: artifacts
 
         - name: Sign in to azure
           uses: azure/login@v3
@@ -159,7 +163,7 @@ jobs:
             type: deployment
             operation: validate
             scope: resourceGroup
-            name: ${{ github.run_number }}
+            name: ${{ github.run_number }}
             subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
             resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
             template-file: ${{ env.TEMPLATE_FILE }}
@@ -184,23 +188,18 @@ jobs:
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
     
-    deploy-site:
+    deploy-solution:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         needs: deploy-infra
         environment: test
 
         steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-
             - name: Download artifact
               uses: actions/download-artifact@v4
               with:
+                name: site, database
                 path: artifacts
-
-            - name: Display structure of downloaded files
-              run: ls -R
 
             - name: Log in with Azure
               uses: azure/login@v3
@@ -209,11 +208,11 @@ jobs:
                 tenant-id: ${{ secrets.AZURE_TENANT_ID }}
                 subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-            - name: Open SQL firewall for runner
+            - name: Open database firewall for runner
               run: |
                 az sql server firewall-rule create \
                   --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                  --server ${{ vars.AZURE_SQL_SERVER_NAME }} \
+                  --server ${{ needs.deploy-infra.outputs.sqlServerName }} \
                   --name github-runner \
                   --start-ip-address 0.0.0.0 \
                   --end-ip-address 0.0.0.0
@@ -226,45 +225,111 @@ jobs:
               env:
                 CONN: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
 
+            - name: Create script for database user
+              run: |
+                cat <<EOF > inline_script.sql
+                
+                DECLARE @sqlCommand VARCHAR(4096);
+                DECLARE @databaseUserName VARCHAR(4096) = '$(databaseUserName)';
+                DECLARE @databaseUserPassword VARCHAR(4096) = '$(databaseUserPassword)';
+                
+                IF NOT EXISTS (SELECT TOP 1 * FROM sys.database_principals WHERE NAME = @databaseUserName)
+                BEGIN
+                  SET @sqlCommand = 'CREATE USER [' + @databaseUserName + '] WITH PASSWORD = ''' + @databaseUserPassword + ''''
+                  PRINT @sqlCommand
+                  EXEC (@sqlCommand)
+                
+                  SET @sqlCommand = 'GRANT EXEC TO [' + @databaseUserName + ']';
+                  PRINT @sqlCommand
+                  EXEC (@sqlCommand)
+                    
+                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datawriter, ''' + @databaseUserName + '''';
+                  PRINT @sqlCommand
+                  EXEC (@sqlCommand)
+                
+                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datareader, ''' + @databaseUserName + '''';
+                  PRINT @sqlCommand
+                  EXEC (@sqlCommand)
+                END
+                EOF
+
+            - name: Run script for database user
+              uses: azure/sql-action@v2
+              with:
+                connection-string: $CONN
+                path: './inline_script.sql'
+                action: 'Run'
+                arguments: '-v databaseUserName=$(USER) -v databaseUserPassword=$(PASS)'
+              env:
+                CONN: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
+                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
+                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
+            
             - name: Deploy api
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
-                app-name: ${{ vars.AZURE_API_APPSERVICE_NAME }}
+                app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
                 package: artifacts/site/api.zip
+
+            - name: Update api service settings
+              uses: Azure/appservice-settings@v1
+              with:
+                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+                app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
+                app-settings-json: '[{ "name": "AzureStorage__fileShareName", "value": "files", "slotSetting": false }]'
+                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerName }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password="${{ env.PASS }}";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
+              env:
+                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
+                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
 
             - name: Verify api
               run: |
                 az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                    --name ${{ vars.AZURE_API_APPSERVICE_NAME }} \
+                    --name ${{ needs.deploy-infra.outputs.apiHostName }} \
                     --query state
             
             - name: Deploy app
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
-                app-name: ${{ vars.AZURE_APP_APPSERVICE_NAME }}
+                app-name: ${{ needs.deploy-infra.outputs.appHostName }}
                 package: artifacts/site/app.zip
+
+            - name: Update app service settings
+              uses: Azure/appservice-settings@v1
+              with:
+                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+                app-name: ${{ needs.deploy-infra.outputs.appHostName }}
+                app-settings-json: '[{ "name": "AzureStorage__fileShareName", "value": "files", "slotSetting": false }]'
+                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerName }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password="${{ env.PASS }}";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
+              env:
+                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
+                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
 
             - name: Verify app
               run: |
                 az webapp show \
                     --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                    --name ${{ vars.AZURE_APP_APPSERVICE_NAME }} \
+                    --name ${{ needs.deploy-infra.outputs.appHostName }} \
                     --query state
 
-            - name: Close SQL firewall for runner
+            - name: Close database firewall for runner
               if: always()
               run: |
                 az sql server firewall-rule delete \
                   --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                  --server ${{ vars.AZURE_SQL_SERVER_NAME }} \
+                  --server ${{ needs.deploy-infra.outputs.sqlServerName }} \
                   --name github-runner
+        
+        outputs:
+          webApiURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.apiHostName) }}
+          webAppURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.appHostName) }}
 
     validate-perfomance:
         runs-on: ubuntu-latest
-        needs: deploy-site
+        needs: deploy-solution
         steps:
         - name: Checkout code
           uses: actions/checkout@v4
@@ -273,16 +338,14 @@ jobs:
           uses: treosh/lighthouse-ci-action@v12
           with:
             urls: |
-                https://app-bikes-app-test-gwjeyl.azurewebsites.net/
-                https://app-bikes-app-test-gwjeyl.azurewebsites.net/Customer
-                https://app-bikes-app-test-gwjeyl.azurewebsites.net/City
-                https://app-bikes-app-test-gwjeyl.azurewebsites.net/Theater
+                ${{ needs.deploy-solution.outputs.webAppURL }}
+                ${{ needs.deploy-solution.outputs.webAppURL }}/Bikes
             uploadArtifacts: true # save results as an action artifacts
             temporaryPublicStorage: true # upload lighthouse report to the temporary storage
     
     validate-security:
         runs-on: ubuntu-latest
-        needs: deploy-site
+        needs: deploy-solution
         steps:
         - name: Checkout code
           uses: actions/checkout@v4
@@ -290,5 +353,5 @@ jobs:
         - name: ZAP scan
           uses: zaproxy/action-full-scan@v0.13.0
           with:
-            target: 'https://app-bikes-app-test-gwjeyl.azurewebsites.net/'
+            target: ${{ needs.deploy-solution.outputs.webAppURL }}
             allow_issue_writing: false
