@@ -134,8 +134,8 @@ jobs:
         environment: test
         needs: [build-infra, build-solution]
         env:
-            TEMPLATE_FILE: "./artifacts/infra/main.bicep"
-            PARAMETER_TEST_FILE: "./artifacts/infra/main.parameters.test.json"
+            TEMPLATE_FILE: "./artifacts/main.bicep"
+            PARAMETER_TEST_FILE: "./artifacts/main.parameters.test.json"
         
         steps:
         - name: Download artifact
@@ -276,7 +276,7 @@ jobs:
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
-                package: artifacts/site/api.zip
+                package: ./artifacts/site/api.zip
 
             - name: Update api service settings
               uses: Azure/appservice-settings@v1
@@ -301,7 +301,7 @@ jobs:
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ needs.deploy-infra.outputs.appHostName }}
-                package: artifacts/site/app.zip
+                package: ./artifacts/site/app.zip
 
             - name: Update app service settings
               uses: Azure/appservice-settings@v1
