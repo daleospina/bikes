@@ -16,15 +16,15 @@ builder.Services.AddDbContextFactory<BikesContext>((serviceProvider, options) =>
     var config = serviceProvider.GetRequiredService<IConfiguration>();
     var connectionString = config.GetConnectionString("BikesContext");
 
-    var credential = new DefaultAzureCredential();
-    var token = credential.GetToken(
-        new TokenRequestContext(new[] { "https://database.windows.net/.default" })
-    );
+    // var credential = new DefaultAzureCredential();
+    // var token = credential.GetToken(
+    //     new TokenRequestContext(new[] { "https://database.windows.net/.default" })
+    // );
 
-    var connection = new SqlConnection(connectionString);
-    connection.AccessToken = token.Token;
+    // var connection = new SqlConnection(connectionString);
+    // connection.AccessToken = token.Token;
 
-    options.UseSqlServer(connection);
+    options.UseSqlServer(connectionString);
 });
 
 builder.Services.AddQuickGridEntityFrameworkAdapter();
