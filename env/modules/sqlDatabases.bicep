@@ -144,4 +144,5 @@ resource privateDnsZoneGroupSql 'Microsoft.Network/privateEndpoints/privateDnsZo
 
 // Outputs
 output serverFQDN string = sqlServer.properties.fullyQualifiedDomainName
+output serverName string = sqlServer.name
 output databaseName string = sqlDataBase.name

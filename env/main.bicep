@@ -272,5 +272,6 @@ module appGateways 'modules/appGateways.bicep' = {
 
 output appHostName string = appServices.outputs.appName
 output apiHostName string = appServices.outputs.apiName
-output sqlServerName string = sqlDatabases.outputs.serverFQDN
+output sqlServerFQDN string = sqlDatabases.outputs.serverFQDN
+output sqlServerName string = sqlDatabases.outputs.serverName
 output sqlDatabaseName string = sqlDatabases.outputs.databaseName

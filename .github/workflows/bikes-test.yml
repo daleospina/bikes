@@ -188,6 +188,7 @@ jobs:
         outputs:
             appHostName: ${{ steps.deploy.outputs.appHostName }}
             apiHostName: ${{ steps.deploy.outputs.apiHostName }}
+            sqlServerFQDN: ${{ steps.deploy.outputs.sqlServerFQDN }}
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
     
@@ -201,9 +202,6 @@ jobs:
             - name: Download artifact
               uses: actions/download-artifact@v4
               with:
-                pattern: |
-                  database
-                  site
                 path: artifacts
 
             - name: Display structure of downloaded files
@@ -286,7 +284,7 @@ jobs:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
                 app-settings-json: '[{ "name": "AzureStorage__fileShareName", "value": "files", "slotSetting": false }]'
-                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerName }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password="${{ env.PASS }}";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
+                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password="${{ env.PASS }}";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
               env:
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
@@ -311,7 +309,7 @@ jobs:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ needs.deploy-infra.outputs.appHostName }}
                 app-settings-json: '[{ "name": "AzureStorage__fileShareName", "value": "files", "slotSetting": false }]'
-                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerName }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password="${{ env.PASS }}";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
+                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password="${{ env.PASS }}";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
               env:
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
