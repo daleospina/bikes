@@ -112,12 +112,12 @@ jobs:
             - name: Zip api
               run: |
                 cd publish/api
-                zip -r ../../api.zip .
+                zip -r ../api.zip .
 
             - name: Zip app
               run: |
                 cd publish/app
-                zip -r ../../app.zip .
+                zip -r ../app.zip .
 
             - name: Upload database
               uses: actions/upload-artifact@v4
