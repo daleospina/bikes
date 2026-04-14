@@ -262,12 +262,11 @@ jobs:
             - name: Run script for database user
               uses: azure/sql-action@v2
               with:
-                connection-string: "$CONN"
+                connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 path: './inline_script.sql'
                 action: 'Run'
                 arguments: '-v databaseUserName=$(USER) -v databaseUserPassword=$(PASS)'
               env:
-                CONN: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
             
