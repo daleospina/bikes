@@ -143,6 +143,9 @@ jobs:
           with:
             name: infra
             path: artifacts
+        
+        - name: Display structure of downloaded files
+          run: ls -R
 
         - name: Sign in to azure
           uses: azure/login@v3
@@ -200,6 +203,9 @@ jobs:
               with:
                 name: site, database
                 path: artifacts
+
+            - name: Display structure of downloaded files
+              run: ls -R
 
             - name: Log in with Azure
               uses: azure/login@v3
