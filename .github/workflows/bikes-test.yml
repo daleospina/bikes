@@ -174,6 +174,18 @@ jobs:
             resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
             template-file: ${{ env.TEMPLATE_FILE }}
             parameters-file: ${{ env.PARAMETER_TEST_FILE }}
+        
+        - name: Read secure outputs
+          id: readSecureOutputs
+          uses: azure/cli@v2
+          with:
+            inlineScript: |
+              outputs=$(az deployment group show \
+                --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
+                --name ${{ github.run_number }} \
+                --query properties.outputs)
+
+              echo "storageConnectionString=$(echo $outputs | jq -r '.storageConnectionString.value')" >> $GITHUB_OUTPUT
 
         outputs:
             appHostName: ${{ steps.deploy.outputs.appHostName }}
@@ -181,9 +193,9 @@ jobs:
             sqlServerFQDN: ${{ steps.deploy.outputs.sqlServerFQDN }}
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
-            storageConnectionString: "${{ steps.deploy.outputs.storageConnectionString }}"
             storageFileServiceUrl: ${{ steps.deploy.outputs.storageFileServiceUrl }}
             storageFileShareName: ${{ steps.deploy.outputs.storageFileShareName }}
+            storageConnectionString: ${{ steps.readSecureOutputs.outputs.storageConnectionString }}
 
     deploy-solution:
         runs-on: ubuntu-latest
