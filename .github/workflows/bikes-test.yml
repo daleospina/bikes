@@ -181,7 +181,7 @@ jobs:
             sqlServerFQDN: ${{ steps.deploy.outputs.sqlServerFQDN }}
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
-            storageConnectionString: ${{ steps.deploy.outputs.storageConnectionString }}
+            storageConnectionString: "${{ steps.deploy.outputs.storageConnectionString }}"
             storageFileServiceUrl: ${{ steps.deploy.outputs.storageFileServiceUrl }}
             storageFileShareName: ${{ steps.deploy.outputs.storageFileShareName }}
 
