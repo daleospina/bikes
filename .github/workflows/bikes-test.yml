@@ -263,6 +263,13 @@ jobs:
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
             
+            - name: Setup connection string
+              run: |
+                    echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password=${{ env.PASS }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
+              env:
+                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
+                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
+
             - name: Deploy api
               uses: azure/webapps-deploy@v3
               with:
@@ -273,18 +280,17 @@ jobs:
             - name: Update api service settings
               uses: Azure/appservice-settings@v1
               with:
-                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
                 app-settings-json: |
                                   [
                                     { 
                                       "name": "AzureStorage__fileShareUrl", 
-                                      "value": ${{ needs.deploy-infra.outputs.storageFileServiceUrl }}, 
+                                      "value": "${{ needs.deploy-infra.outputs.storageFileServiceUrl }}", 
                                       "slotSetting": false 
                                     },
                                     { 
                                       "name": "AzureStorage__fileShareName", 
-                                      "value": ${{ needs.deploy-infra.outputs.storageFileShareName }}, 
+                                      "value": "${{ needs.deploy-infra.outputs.storageFileShareName }}", 
                                       "slotSetting": false 
                                     }
                                   ]
@@ -292,18 +298,17 @@ jobs:
                                         [
                                           { 
                                             "name": "BikesContext", 
-                                            "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password=\"${{ env.PASS }}\";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;",
+                                            "value": "${{ env.SQL_CONNECTION_STRING }}",
+                                            "type": "SQLAzure",
                                             "slotSetting": false 
                                           },
                                           {
                                             "name": "bikeStorage", 
-                                            "value": ${{ needs.deploy-infra.outputs.storageConnectionString }},
+                                            "value": "${{ needs.deploy-infra.outputs.storageConnectionString }}",
+                                            "type": "Custom",
                                             "slotSetting": false 
                                           }
                                         ]
-              env:
-                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
-                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
             
             - name: Deploy app
               uses: azure/webapps-deploy@v3
@@ -315,13 +320,35 @@ jobs:
             - name: Update app service settings
               uses: Azure/appservice-settings@v1
               with:
-                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
                 app-name: ${{ needs.deploy-infra.outputs.appHostName }}
-                app-settings-json: '[{ "name": "AzureStorage__fileShareName", "value": "files", "slotSetting": false }]'
-                connection-strings-json: '[{ "name": "BikesContext", "value": "Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password=\"${{ env.PASS }}\";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;", "slotSetting": false }]'                    
-              env:
-                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
-                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
+                app-settings-json: |
+                                  [
+                                    { 
+                                      "name": "AzureStorage__fileShareUrl", 
+                                      "value": "${{ needs.deploy-infra.outputs.storageFileServiceUrl }}", 
+                                      "slotSetting": false 
+                                    },
+                                    { 
+                                      "name": "AzureStorage__fileShareName", 
+                                      "value": "${{ needs.deploy-infra.outputs.storageFileShareName }}", 
+                                      "slotSetting": false 
+                                    }
+                                  ]
+                connection-strings-json: |
+                                        [
+                                          { 
+                                            "name": "BikesContext", 
+                                            "value": "${{ env.SQL_CONNECTION_STRING }}",
+                                            "type": "SQLAzure",
+                                            "slotSetting": false 
+                                          },
+                                          {
+                                            "name": "bikeStorage", 
+                                            "value": "${{ needs.deploy-infra.outputs.storageConnectionString }}",
+                                            "type": "Custom",
+                                            "slotSetting": false 
+                                          }
+                                        ]
 
             - name: Close database firewall for runner
               if: always()
