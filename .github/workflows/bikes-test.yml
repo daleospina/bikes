@@ -287,13 +287,6 @@ jobs:
               env:
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
-
-            - name: Verify api
-              run: |
-                az webapp show \
-                    --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                    --name ${{ needs.deploy-infra.outputs.apiHostName }} \
-                    --query state
             
             - name: Deploy app
               uses: azure/webapps-deploy@v3
@@ -313,13 +306,6 @@ jobs:
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
 
-            - name: Verify app
-              run: |
-                az webapp show \
-                    --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                    --name ${{ needs.deploy-infra.outputs.appHostName }} \
-                    --query state
-
             - name: Close database firewall for runner
               if: always()
               run: |
@@ -336,9 +322,16 @@ jobs:
         runs-on: ubuntu-latest
         needs: deploy-solution
         steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-
+        
+        - name: Smoke test
+          run: |
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ needs.deploy-solution.outputs.webAppURL }})
+            if [ $STATUS -ne 200 ]; then
+              echo "Smoke test failed with status $STATUS"
+              exit 1
+            fi
+            echo "Smoke test passed!"  
+          
         - name: Lighthouse scan
           uses: treosh/lighthouse-ci-action@v12
           with:
@@ -347,16 +340,11 @@ jobs:
                 ${{ needs.deploy-solution.outputs.webAppURL }}/Bikes
             uploadArtifacts: true # save results as an action artifacts
             temporaryPublicStorage: true # upload lighthouse report to the temporary storage
-    
-    validate-security:
-        runs-on: ubuntu-latest
-        needs: deploy-solution
-        steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
 
         - name: ZAP scan
           uses: zaproxy/action-baseline-scan@v0.15.0
           with:
             target: ${{ needs.deploy-solution.outputs.webAppURL }}
             allow_issue_writing: false
+
+        
