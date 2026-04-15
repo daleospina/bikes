@@ -199,6 +199,7 @@ var keys = listKeys(storageAccount.id, storageAccount.apiVersion)
 
 // Outputs
 output id string = storageAccount.id
-output connectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${keys.keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
-output fileServiceUrl string = 'https://${storageAccount.name}.file.${environment().suffixes.storage}'
+output name string = storageAccount.name
+output key string = keys.keys[0].value
+output environment string = environment().suffixes.storage
 output fileShareName string = fileShare.name

@@ -174,18 +174,6 @@ jobs:
             resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
             template-file: ${{ env.TEMPLATE_FILE }}
             parameters-file: ${{ env.PARAMETER_TEST_FILE }}
-        
-        - name: Read secure outputs
-          id: readSecureOutputs
-          uses: azure/cli@v2
-          with:
-            inlineScript: |
-              outputs=$(az deployment group show \
-                --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                --name ${{ github.run_number }} \
-                --query properties.outputs)
-
-              echo "storageConnectionString=$(echo $outputs | jq -r '.storageConnectionString.value')" >> $GITHUB_OUTPUT
 
         outputs:
             appHostName: ${{ steps.deploy.outputs.appHostName }}
@@ -193,9 +181,10 @@ jobs:
             sqlServerFQDN: ${{ steps.deploy.outputs.sqlServerFQDN }}
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
-            storageFileServiceUrl: ${{ steps.deploy.outputs.storageFileServiceUrl }}
+            storageName: ${{ steps.deploy.outputs.storageName }}
+            storageKey: ${{ steps.deploy.outputs.storageKey }}
+            storageEnvironment: ${{ steps.deploy.outputs.storageEnvironment }}
             storageFileShareName: ${{ steps.deploy.outputs.storageFileShareName }}
-            storageConnectionString: ${{ steps.readSecureOutputs.outputs.storageConnectionString }}
 
     deploy-solution:
         runs-on: ubuntu-latest
@@ -278,6 +267,8 @@ jobs:
             - name: Setup connection string
               run: |
                     echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password=${{ env.PASS }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
+                    echo "STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=${{ needs.deploy-infra.outputs.storageName }};AccountKey=${{ needs.deploy-infra.outputs.storageKey }};EndpointSuffix=${{ needs.deploy-infra.outputs.storageEnvironment }}'" >> $GITHUB_ENV
+                    echo "STORAGE_FILE_SERVICE_URL=https://${{ needs.deploy-infra.outputs.storageName }}.file.${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
               env:
                 USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
                 PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
@@ -297,7 +288,7 @@ jobs:
                                   [
                                     { 
                                       "name": "AzureStorage__fileShareUrl", 
-                                      "value": "${{ needs.deploy-infra.outputs.storageFileServiceUrl }}", 
+                                      "value": "${{ env.STORAGE_FILE_SERVICE_URL }}", 
                                       "slotSetting": false 
                                     },
                                     { 
@@ -316,7 +307,7 @@ jobs:
                                           },
                                           {
                                             "name": "bikeStorage", 
-                                            "value": "${{ needs.deploy-infra.outputs.storageConnectionString }}",
+                                            "value": "${{ env.STORAGE_CONNECTION_STRING }}",
                                             "type": "Custom",
                                             "slotSetting": false 
                                           }
@@ -337,7 +328,7 @@ jobs:
                                   [
                                     { 
                                       "name": "AzureStorage__fileShareUrl", 
-                                      "value": "${{ needs.deploy-infra.outputs.storageFileServiceUrl }}", 
+                                      "value": "${{ env.STORAGE_FILE_SERVICE_URL }}", 
                                       "slotSetting": false 
                                     },
                                     { 
@@ -356,7 +347,7 @@ jobs:
                                           },
                                           {
                                             "name": "bikeStorage", 
-                                            "value": "${{ needs.deploy-infra.outputs.storageConnectionString }}",
+                                            "value": "${{ env.STORAGE_CONNECTION_STRING }}",
                                             "type": "Custom",
                                             "slotSetting": false 
                                           }
