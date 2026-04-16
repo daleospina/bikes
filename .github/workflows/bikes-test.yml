@@ -239,25 +239,30 @@ jobs:
               run: |
                 cat <<'EOF' > inline_script.sql
 
-                DECLARE @sqlCommand VARCHAR(4096);
-                
-                IF NOT EXISTS (SELECT TOP 1 * FROM sys.database_principals WHERE NAME = '$(databaseUserName)')
+                DECLARE @sqlCommand NVARCHAR(MAX);
+                DECLARE @user SYSNAME = N'$(databaseUserName)';
+                DECLARE @pass NVARCHAR(128) = N'$(databaseUserPassword)';
+
+                IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @user)
                 BEGIN
-                  SET @sqlCommand = 'CREATE USER [' + $(databaseUserName) + '] WITH PASSWORD = ''' + $(databaseUserPassword) + ''''
-                  PRINT @sqlCommand
-                  EXEC (@sqlCommand)
-                
-                  SET @sqlCommand = 'GRANT EXEC TO [' + $(databaseUserName) + ']';
-                  PRINT @sqlCommand
-                  EXEC (@sqlCommand)
+                    -- Crear el usuario (usando QUOTENAME para evitar inyección SQL)
+                    SET @sqlCommand = 'CREATE USER ' + QUOTENAME(@user) + ' WITH PASSWORD = ''' + REPLACE(@pass, '''', '''''') + '''';
+                    PRINT 'Ejecutando: ' + @sqlCommand;
+                    EXEC sp_executesql @sqlCommand;
+
+                    -- Asignar permisos de ejecución
+                    SET @sqlCommand = 'GRANT EXEC TO ' + QUOTENAME(@user);
+                    EXEC sp_executesql @sqlCommand;
                     
-                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datawriter, ''' + $(databaseUserName) + '''';
-                  PRINT @sqlCommand
-                  EXEC (@sqlCommand)
-                
-                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datareader, ''' + $(databaseUserName) + '''';
-                  PRINT @sqlCommand
-                  EXEC (@sqlCommand)
+                    -- Agregar a roles
+                    EXEC sp_addrolemember 'db_datawriter', @user;
+                    EXEC sp_addrolemember 'db_datareader', @user;
+                    
+                    PRINT 'Usuario ' + @user + ' creado con éxito.';
+                END
+                ELSE
+                BEGIN
+                    PRINT 'El usuario ' + @user + ' ya existe.';
                 END
                 EOF
 
