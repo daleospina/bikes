@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "dev/**"
+      - "main"
     paths:
       - "env/**"
       - "src/**"
@@ -123,7 +123,7 @@ jobs:
                 name: site
                 path: publish/*.zip
 
-    deploy-infra:
+    deploy-infra-to-test:
         runs-on: ubuntu-latest
         timeout-minutes: 30
         environment: test
@@ -207,10 +207,10 @@ jobs:
             storageFileShareName: ${{ steps.deploy.outputs.storageFileShareName }}
             storageKey: ${{ steps.encrypt.outputs.secret }}
 
-    deploy-solution:
+    deploy-solution-to-test:
         runs-on: ubuntu-latest
         timeout-minutes: 30
-        needs: deploy-infra
+        needs: deploy-infra-to-test
         environment: test
 
         steps:
@@ -392,9 +392,9 @@ jobs:
           webApiURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.apiHostName) }}
           webAppURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.appHostName) }}
 
-    scan-solution:
+    scan-solution-in-test:
         runs-on: ubuntu-latest
-        needs: deploy-solution
+        needs: deploy-solution-to-test
         steps:
         
         - name: Smoke test
@@ -419,5 +419,36 @@ jobs:
           with:
             target: ${{ needs.deploy-solution.outputs.webAppURL }}
             allow_issue_writing: false
+
+    deploy-infra-to-prod:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        environment: prod
+        needs: scan-solution-in-test
+        env:
+            TEMPLATE_FILE: "./artifacts/main.bicep"
+            PARAMETER_PROD_FILE: "./artifacts/main.parameters.prod.json"
+        
+        steps:
+          - name: Display structure of downloaded files
+            run: echo "Deploy infra to prod"
+    
+    deploy-solution-to-prod:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: deploy-infra-to-prod
+        environment: prod
+
+        steps:
+          - name: Display structure of downloaded files
+            run: echo "Deploy solution to prod"
+
+    scan-solution-in-prod:
+        runs-on: ubuntu-latest
+        needs: deploy-solution-to-prod
+        steps:
+          - name: Display structure of downloaded files
+            run: echo "Scan solution in prod"
+        
 
         

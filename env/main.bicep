@@ -156,7 +156,7 @@ param privateEndpointBlobName string = 'pe-${prefix}-blob-${environment}-${suffi
 param privateDnsZoneBlobName string = 'privatelink.blob.core.windows.net'
 
 @description('File share name. File share names must be between 3 and 63 characters in length and use numbers, lower-case letters and dash (-) only.')
-param fileShareName string = 'files'
+param fileShareName string = 'images'
 
 @description('Private file endpoint name')
 param privateEndpointFileName string = 'pe-${prefix}-file-${environment}-${suffix}'
@@ -272,5 +272,10 @@ module appGateways 'modules/appGateways.bicep' = {
 
 output appHostName string = appServices.outputs.appName
 output apiHostName string = appServices.outputs.apiName
-output sqlServerName string = sqlDatabases.outputs.serverFQDN
+output sqlServerFQDN string = sqlDatabases.outputs.serverFQDN
+output sqlServerName string = sqlDatabases.outputs.serverName
 output sqlDatabaseName string = sqlDatabases.outputs.databaseName
+output storageName string = storageAccounts.outputs.name
+output storageKey string = storageAccounts.outputs.key
+output storageEnvironment string = storageAccounts.outputs.environment
+output storageFileShareName string = storageAccounts.outputs.fileShareName

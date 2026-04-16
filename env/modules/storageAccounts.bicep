@@ -195,5 +195,11 @@ resource privateDnsZoneGroupFile 'Microsoft.Network/privateEndpoints/privateDnsZ
   }
 }
 
+var keys = listKeys(storageAccount.id, storageAccount.apiVersion)
+
 // Outputs
 output id string = storageAccount.id
+output name string = storageAccount.name
+output key string = keys.keys[0].value
+output environment string = environment().suffixes.storage
+output fileShareName string = fileShare.name
