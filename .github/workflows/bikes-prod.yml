@@ -1,0 +1,454 @@
+name: Bikes Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "env/**"
+      - "src/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+    build-infra:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        env:
+          TEMPLATE_FILE: "./env/main.bicep"
+          
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Build
+          run: az bicep build --file ${{ env.TEMPLATE_FILE }}
+
+        - name: Upload
+          uses: actions/upload-artifact@v4
+          with:
+            name: infra
+            path: ./env/
+    
+    build-solution:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        env:
+          SOLUTION_FILE: "./src/cicloso.bikes.sln"
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                dotnet-version: '8.0.x'
+
+            - name: Setup EF
+              run: |
+                dotnet tool install --global dotnet-ef
+                dotnet tool restore
+            
+            - name: Setup Sonar
+              run: dotnet tool install --global dotnet-sonarscanner
+
+            - name: Start sonar scan
+              run: |
+                dotnet sonarscanner begin \
+                  /k:"bikes" \
+                  /o:"daleospina-gh" \
+                  /d:sonar.host.url="https://sonarcloud.io" \
+                  /d:sonar.verbose=true
+              env:
+                SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+            - name: Restore
+              run: |
+                dotnet restore ${{ env.SOLUTION_FILE }}
+
+            - name: Build
+              run: |
+                dotnet build ${{ env.SOLUTION_FILE }} \
+                --no-restore \
+                --configuration Release
+
+            - name: Finish sonar scan
+              run: dotnet sonarscanner end
+              env:
+                SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+            - name: Bundle database 
+              run: | 
+                dotnet ef migrations bundle \
+                --project ./src/cicloso.bikes.core/cicloso.bikes.core.csproj \
+                -r linux-x64
+              env:
+                BikesContext: ${{ secrets.AZURE_SQL_CONNECTION_STRING }}
+
+            - name: Publish api
+              run: |
+                dotnet publish ./src/cicloso.bikes.api/cicloso.bikes.api.csproj \
+                -c Release \
+                -o publish/api
+
+            - name: Publish app
+              run: |
+                dotnet publish ./src/cicloso.bikes.app/cicloso.bikes.app.csproj \
+                -c Release \
+                -o publish/app
+
+            - name: Zip api
+              run: |
+                cd publish/api
+                zip -r ../api.zip .
+
+            - name: Zip app
+              run: |
+                cd publish/app
+                zip -r ../app.zip .
+
+            - name: Upload database
+              uses: actions/upload-artifact@v4
+              with:
+                name: database
+                path: ./efbundle
+
+            - name: Upload site
+              uses: actions/upload-artifact@v4
+              with:
+                name: site
+                path: publish/*.zip
+
+    deploy-infra-to-test:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        environment: test
+        needs: [build-infra, build-solution]
+        env:
+            TEMPLATE_FILE: "./artifacts/main.bicep"
+            PARAMETER_TEST_FILE: "./artifacts/main.parameters.test.json"
+        
+        steps:
+        - name: Download artifact
+          uses: actions/download-artifact@v4
+          with:
+            name: infra
+            path: artifacts
+        
+        - name: Display structure of downloaded files
+          run: ls -R
+
+        - name: Sign in to azure
+          uses: azure/login@v3
+          with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Create resource group
+          uses: azure/CLI@v2
+          with:
+            inlineScript: |
+                az group create --name  ${{ vars.AZURE_RESOURCEGROUP_NAME }} --location ${{ vars.AZURE_LOCATION_NAME }}     
+        
+        - name: Validate bicep
+          uses: azure/bicep-deploy@v2
+          with:
+            type: deployment
+            operation: validate
+            scope: resourceGroup
+            name: ${{ github.run_number }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+            template-file: ${{ env.TEMPLATE_FILE }}
+            parameters-file: ${{ env.PARAMETER_TEST_FILE }}
+
+        - name: Deploy to azure
+          id: deploy
+          uses: azure/bicep-deploy@v2
+          with:
+            type: deployment
+            operation: create
+            scope: resourceGroup
+            name: ${{ github.run_number }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+            resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+            template-file: ${{ env.TEMPLATE_FILE }}
+            parameters-file: ${{ env.PARAMETER_TEST_FILE }}
+
+        - name: Encrypt storage key
+          id: encrypt
+          shell: bash
+          run: |
+            printf %s "${{ steps.deploy.outputs.storageKey }}" > secret.txt
+
+            openssl enc -aes-256-cbc -pbkdf2 -salt \
+              -pass pass:"${{ secrets.ENCRYPTION_PASSWORD }}" \
+              -in secret.txt \
+              -out secret.enc
+            
+            base64 -w 0 secret.enc > secret.b64
+            
+            ENCRYPTED_BASE64=$(cat secret.b64)
+            
+            echo "secret=$ENCRYPTED_BASE64" >> "$GITHUB_OUTPUT"
+        outputs:
+            appHostName: ${{ steps.deploy.outputs.appHostName }}
+            apiHostName: ${{ steps.deploy.outputs.apiHostName }}
+            sqlServerFQDN: ${{ steps.deploy.outputs.sqlServerFQDN }}
+            sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
+            sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
+            storageName: ${{ steps.deploy.outputs.storageName }}
+            storageEnvironment: ${{ steps.deploy.outputs.storageEnvironment }}
+            storageFileShareName: ${{ steps.deploy.outputs.storageFileShareName }}
+            storageKey: ${{ steps.encrypt.outputs.secret }}
+
+    deploy-solution-to-test:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: deploy-infra-to-test
+        environment: test
+
+        steps:
+            - name: Download artifact
+              uses: actions/download-artifact@v4
+              with:
+                path: artifacts
+
+            - name: Display structure of downloaded files
+              run: ls -R
+
+            - name: Log in with Azure
+              uses: azure/login@v3
+              with:
+                client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Open database firewall for runner
+              run: |
+                az sql server firewall-rule create \
+                  --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
+                  --server ${{ needs.deploy-infra.outputs.sqlServerName }} \
+                  --name github-runner \
+                  --start-ip-address 0.0.0.0 \
+                  --end-ip-address 0.0.0.0
+
+            - name: Migrate database 
+              shell: bash 
+              run: |  
+                chmod +x ./artifacts/database/efbundle 
+                ./artifacts/database/efbundle --connection "$CONNECTION_STRING"
+              env:
+                CONNECTION_STRING: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
+
+            - name: Create script for database user
+              run: |
+                cat <<EOF > inline_script.sql
+
+                DECLARE @sqlCommand NVARCHAR(MAX);
+                DECLARE @user SYSNAME = N'${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}';
+                DECLARE @pass NVARCHAR(128) = N'${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}';
+
+                IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @user)
+                BEGIN
+                    -- Crear el usuario (usando QUOTENAME para evitar inyección SQL)
+                    SET @sqlCommand = 'CREATE USER ' + QUOTENAME(@user) + ' WITH PASSWORD = ''' + REPLACE(@pass, '''', '''''') + '''';
+                    EXEC sp_executesql @sqlCommand;
+
+                    -- Asignar permisos de ejecución
+                    SET @sqlCommand = 'GRANT EXEC TO ' + QUOTENAME(@user);
+                    EXEC sp_executesql @sqlCommand;
+                    
+                    -- Agregar a roles
+                    EXEC sp_addrolemember 'db_datawriter', @user;
+                    EXEC sp_addrolemember 'db_datareader', @user;
+                END
+                EOF
+
+            - name: Run script for database user
+              uses: azure/sql-action@v2
+              with:
+                connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
+                path: './inline_script.sql'
+
+            - name: Decrypt storage key
+              id: decrypt
+              shell: bash
+              run: |
+                printf %s "${{ needs.deploy-infra.outputs.storageKey }}" > secret.b64
+
+                base64 -d secret.b64 > secret.enc
+                
+                openssl enc -d -aes-256-cbc -pbkdf2 -salt \
+                  -pass pass:"${{ secrets.ENCRYPTION_PASSWORD }}" \
+                  -in secret.enc \
+                  -out secret.txt
+                
+                SECRET=$(cat secret.txt)
+
+                echo "accountKey=$SECRET" >> "$GITHUB_OUTPUT"
+
+            - name: Setup connection string
+              shell: bash
+              run: |
+                    echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }};Password=${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
+                    echo "STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=${{ needs.deploy-infra.outputs.storageName }};AccountKey=${{ steps.decrypt.outputs.accountKey }};EndpointSuffix=${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
+                    echo "STORAGE_FILE_SERVICE_URL=https://${{ needs.deploy-infra.outputs.storageName }}.file.${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
+
+            - name: Deploy api
+              uses: azure/webapps-deploy@v3
+              with:
+                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+                app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
+                package: ./artifacts/site/api.zip
+
+            - name: Update api service settings
+              uses: Azure/appservice-settings@v1
+              with:
+                app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
+                app-settings-json: |
+                                  [
+                                    { 
+                                      "name": "AzureStorage__fileShareUrl", 
+                                      "value": "${{ env.STORAGE_FILE_SERVICE_URL }}", 
+                                      "slotSetting": false 
+                                    },
+                                    { 
+                                      "name": "AzureStorage__fileShareName", 
+                                      "value": "${{ needs.deploy-infra.outputs.storageFileShareName }}", 
+                                      "slotSetting": false 
+                                    }
+                                  ]
+                connection-strings-json: |
+                                        [
+                                          { 
+                                            "name": "BikesContext", 
+                                            "value": "${{ env.SQL_CONNECTION_STRING }}",
+                                            "type": "SQLAzure",
+                                            "slotSetting": false 
+                                          },
+                                          {
+                                            "name": "bikeStorage", 
+                                            "value": "${{ env.STORAGE_CONNECTION_STRING }}",
+                                            "type": "Custom",
+                                            "slotSetting": false 
+                                          }
+                                        ]
+            
+            - name: Deploy app
+              uses: azure/webapps-deploy@v3
+              with:
+                resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
+                app-name: ${{ needs.deploy-infra.outputs.appHostName }}
+                package: ./artifacts/site/app.zip
+
+            - name: Update app service settings
+              uses: Azure/appservice-settings@v1
+              with:
+                app-name: ${{ needs.deploy-infra.outputs.appHostName }}
+                app-settings-json: |
+                                  [
+                                    { 
+                                      "name": "AzureStorage__fileShareUrl", 
+                                      "value": "${{ env.STORAGE_FILE_SERVICE_URL }}", 
+                                      "slotSetting": false 
+                                    },
+                                    { 
+                                      "name": "AzureStorage__fileShareName", 
+                                      "value": "${{ needs.deploy-infra.outputs.storageFileShareName }}", 
+                                      "slotSetting": false 
+                                    }
+                                  ]
+                connection-strings-json: |
+                                        [
+                                          { 
+                                            "name": "BikesContext", 
+                                            "value": "${{ env.SQL_CONNECTION_STRING }}",
+                                            "type": "SQLAzure",
+                                            "slotSetting": false 
+                                          },
+                                          {
+                                            "name": "bikeStorage", 
+                                            "value": "${{ env.STORAGE_CONNECTION_STRING }}",
+                                            "type": "Custom",
+                                            "slotSetting": false 
+                                          }
+                                        ]
+
+            - name: Close database firewall for runner
+              if: always()
+              run: |
+                az sql server firewall-rule delete \
+                  --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
+                  --server ${{ needs.deploy-infra.outputs.sqlServerName }} \
+                  --name github-runner
+        
+        outputs:
+          webApiURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.apiHostName) }}
+          webAppURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.appHostName) }}
+
+    scan-solution-in-test:
+        runs-on: ubuntu-latest
+        needs: deploy-solution-to-test
+        steps:
+        
+        - name: Smoke test
+          run: |
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ needs.deploy-solution.outputs.webAppURL }})
+            if [ $STATUS -ne 200 ]; then
+              echo "Smoke test failed with status $STATUS"
+              exit 1
+            fi
+            echo "Smoke test passed!"  
+          
+        - name: Lighthouse scan
+          uses: treosh/lighthouse-ci-action@v12
+          with:
+            urls: |
+                ${{ needs.deploy-solution.outputs.webAppURL }}
+                ${{ needs.deploy-solution.outputs.webAppURL }}/Bikes
+            uploadArtifacts: true
+
+        - name: ZAP scan
+          uses: zaproxy/action-baseline@v0.15.0
+          with:
+            target: ${{ needs.deploy-solution.outputs.webAppURL }}
+            allow_issue_writing: false
+
+    deploy-infra-to-prod:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        environment: prod
+        needs: scan-solution-in-test
+        env:
+            TEMPLATE_FILE: "./artifacts/main.bicep"
+            PARAMETER_PROD_FILE: "./artifacts/main.parameters.prod.json"
+        
+        steps:
+          - name: Display structure of downloaded files
+            run: echo "Deploy infra to prod"
+    
+    deploy-solution-to-prod:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: deploy-infra-to-prod
+        environment: prod
+
+        steps:
+          - name: Display structure of downloaded files
+            run: echo "Deploy solution to prod"
+
+    scan-solution-in-prod:
+        runs-on: ubuntu-latest
+        needs: deploy-solution-to-prod
+        steps:
+          - name: Display structure of downloaded files
+            run: echo "Scan solution in prod"
+        
+
+        
