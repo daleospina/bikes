@@ -231,9 +231,9 @@ jobs:
               shell: bash 
               run: |  
                 chmod +x ./artifacts/database/efbundle 
-                ./artifacts/database/efbundle --connection "$CONN"
+                ./artifacts/database/efbundle --connection "$CONNECTION_STRING"
               env:
-                CONN: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
+                CONNECTION_STRING: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
 
             - name: Create script for database user
               run: |
@@ -271,11 +271,12 @@ jobs:
                 connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 path: './inline_script.sql'
                 arguments: >
-                  -v databaseUserName= "${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}" 
+                  -v databaseUserName="${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}" 
                   -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}"
             
             - name: Decrypt storage key
               id: decrypt
+              shell: bash
               run: |
                 echo "${{ needs.deploy-infra.outputs.storageKey }}" | base64 -d > secret.enc
 
@@ -284,7 +285,6 @@ jobs:
                   -k "${{ secrets.ENCRYPTION_PASSWORD }}")
 
                 echo "accountKey=$SECRET" >> "$GITHUB_OUTPUT"
-              shell: bash
 
             - name: Setup connection string
               run: |
