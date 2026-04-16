@@ -52,6 +52,18 @@ jobs:
               run: |
                 dotnet tool install --global dotnet-ef
                 dotnet tool restore
+            
+            - name: Setup Sonar
+              run: dotnet tool install --global dotnet-sonarscanner
+
+            - name: Start sonar scan
+              run: |
+                dotnet sonarscanner begin \
+                  /k:"bikes" \
+                  /o:"daleospina-gh" \
+                  /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+                  /d:sonar.host.url="https://sonarcloud.io" \
+                  /d:sonar.verbose=true
 
             - name: Restore
               run: |
@@ -63,18 +75,9 @@ jobs:
                 --no-restore \
                 --configuration Release
 
-            - name: Scan
-              uses: SonarSource/sonarqube-scan-action@v7.0.0 # Ex: v4.1.0 or sha1, See the latest version at https://github.com/marketplace/actions/official-sonarqube-scan
-              env:
-                SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-              with:
-                projectBaseDir: .
-                args: >
-                    -Dsonar.organization=daleospina-gh
-                    -Dsonar.projectName=bikes
-                    -Dsonar.projectKey=bikes
-                    -Dsonar.sources=.
-                    -Dsonar.verbose=true
+            - name: Finish sonar scan
+              run: dotnet sonarscanner end \
+                  /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
             - name: Bundle database 
               run: | 
@@ -279,7 +282,7 @@ jobs:
 
                 base64 -d secret.b64 > secret.enc
                 
-                openssl enc -d -aes-256-cbc -pbkdf2 -salt 
+                openssl enc -d -aes-256-cbc -pbkdf2 -salt \
                   -pass pass:"${{ secrets.ENCRYPTION_PASSWORD }}" \
                   -in secret.enc \
                   -out secret.txt
