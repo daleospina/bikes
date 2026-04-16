@@ -237,8 +237,10 @@ jobs:
 
             - name: Create script for database user
               run: |
-                cat <<EOF > inline_script.sql
-                
+                cat <<'EOF' > inline_script.sql
+                :setvar databaseUserName ""
+                :setvar databaseUserPassword ""
+
                 DECLARE @sqlCommand VARCHAR(4096);
                 DECLARE @databaseUserName VARCHAR(4096) = '$(databaseUserName)';
                 DECLARE @databaseUserPassword VARCHAR(4096) = '$(databaseUserPassword)';
@@ -268,11 +270,9 @@ jobs:
               with:
                 connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 path: './inline_script.sql'
-                action: 'Run'
-                arguments: '-v databaseUserName=$(USER) -v databaseUserPassword=$(PASS)'
-              env:
-                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
-                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
+                arguments: >
+                  -v databaseUserName= "${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}" 
+                  -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}"
             
             - name: Decrypt storage key
               id: decrypt
@@ -288,12 +288,9 @@ jobs:
 
             - name: Setup connection string
               run: |
-                    echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ env.USER }};Password=${{ env.PASS }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
+                    echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }};Password=${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
                     echo "STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=${{ needs.deploy-infra.outputs.storageName }};AccountKey=${{ steps.decrypt.outputs.accountKey }};EndpointSuffix=${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
                     echo "STORAGE_FILE_SERVICE_URL=https://${{ needs.deploy-infra.outputs.storageName }}.file.${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
-              env:
-                USER: ${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}
-                PASS: ${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}
 
             - name: Deploy api
               uses: azure/webapps-deploy@v3
