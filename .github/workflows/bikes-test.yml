@@ -283,7 +283,7 @@ jobs:
                   -in secret.enc \
                   -k "${{ secrets.ENCRYPTION_PASSWORD }}")
 
-                echo "storageKey=$SECRET" >> "$GITHUB_OUTPUT"
+                echo "accountKey=$SECRET" >> "$GITHUB_OUTPUT"
               shell: bash
 
             - name: Setup connection string
