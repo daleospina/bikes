@@ -178,9 +178,12 @@ jobs:
         - name: Encrypt storage key
           id: encrypt
           run: |
-              SECRET=${{ steps.deploy.outputs.storageKey }}; 
-              BINARY_ENCRYPTED_SECRET=$(echo -n "$SECRET" | openssl enc -aes-256-cbc -pbkdf2 -salt -k "${{ secrets.ENCRYPTION_PASSWORD }}") 
-              echo "secret=$BINARY_ENCRYPTED_SECRET" >> $GITHUB_OUTPUT 
+            SECRET="${{ steps.deploy.outputs.storageKey }}"
+            ENCRYPTED_BASE64=$(echo -n "$SECRET" \
+              | openssl enc -aes-256-cbc -pbkdf2 -salt -k "${{ secrets.ENCRYPTION_PASSWORD }}" \
+              | base64 -w 0)
+            echo "secret=$ENCRYPTED_BASE64" >> "$GITHUB_OUTPUT"
+          shell: bash
         
         outputs:
             appHostName: ${{ steps.deploy.outputs.appHostName }}
@@ -189,9 +192,9 @@ jobs:
             sqlServerName: ${{ steps.deploy.outputs.sqlServerName }}
             sqlDatabaseName: ${{ steps.deploy.outputs.sqlDatabaseName }}
             storageName: ${{ steps.deploy.outputs.storageName }}
-            storageKey: ${{ steps.encrypt.outputs.secret }}
             storageEnvironment: ${{ steps.deploy.outputs.storageEnvironment }}
             storageFileShareName: ${{ steps.deploy.outputs.storageFileShareName }}
+            storageKey: ${{ steps.encrypt.outputs.secret }}
 
     deploy-solution:
         runs-on: ubuntu-latest
@@ -274,9 +277,14 @@ jobs:
             - name: Decrypt storage key
               id: decrypt
               run: |
-                  BINARY_ENCRYPTED_SECRET=${{ needs.deploy-infra.outputs.storageKey }}; 
-                  SECRET=$(echo -n "$BINARY_ENCRYPTED_SECRET" | openssl enc -aes-256-cbc -pbkdf2 -d -salt -k "${{ secrets.ENCRYPTION_PASSWORD }}"); 
-                  echo "accountKey=$SECRET" >> $GITHUB_OUTPUT 
+                echo "${{ needs.deploy-infra.outputs.storageKey }}" | base64 -d > secret.enc
+
+                SECRET=$(openssl enc -aes-256-cbc -pbkdf2 -d -salt \
+                  -in secret.enc \
+                  -k "${{ secrets.ENCRYPTION_PASSWORD }}")
+
+                echo "storageKey=$SECRET" >> "$GITHUB_OUTPUT"
+              shell: bash
 
             - name: Setup connection string
               run: |
