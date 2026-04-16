@@ -177,13 +177,13 @@ jobs:
 
         - name: Encrypt storage key
           id: encrypt
+          shell: bash
           run: |
             SECRET="${{ steps.deploy.outputs.storageKey }}"
             ENCRYPTED_BASE64=$(echo -n "$SECRET" \
               | openssl enc -aes-256-cbc -pbkdf2 -salt -k "${{ secrets.ENCRYPTION_PASSWORD }}" \
               | base64 -w 0)
             echo "secret=$ENCRYPTED_BASE64" >> "$GITHUB_OUTPUT"
-          shell: bash
         
         outputs:
             appHostName: ${{ steps.deploy.outputs.appHostName }}
@@ -237,11 +237,11 @@ jobs:
 
             - name: Create script for database user
               run: |
-                cat <<'EOF' > inline_script.sql
+                cat <<EOF > inline_script.sql
 
                 DECLARE @sqlCommand NVARCHAR(MAX);
-                DECLARE @user SYSNAME = N'$(databaseUserName)';
-                DECLARE @pass NVARCHAR(128) = N'$(databaseUserPassword)';
+                DECLARE @user SYSNAME = N'${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}';
+                DECLARE @pass NVARCHAR(128) = N'${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}';
 
                 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @user)
                 BEGIN
@@ -271,24 +271,19 @@ jobs:
               with:
                 connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 path: './inline_script.sql'
-                arguments: >
-                  -v databaseUserName="${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}"
-                  -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}"
-                  -I
-            
+
             - name: Decrypt storage key
               id: decrypt
               shell: bash
               run: |
                 echo "${{ needs.deploy-infra.outputs.storageKey }}" | base64 -d > secret.enc
-
                 SECRET=$(openssl enc -aes-256-cbc -pbkdf2 -d -salt \
                   -in secret.enc \
                   -k "${{ secrets.ENCRYPTION_PASSWORD }}")
-
                 echo "accountKey=$SECRET" >> "$GITHUB_OUTPUT"
 
             - name: Setup connection string
+              shell: bash
               run: |
                     echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }};Password=${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
                     echo "STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=${{ needs.deploy-infra.outputs.storageName }};AccountKey=${{ steps.decrypt.outputs.accountKey }};EndpointSuffix=${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
