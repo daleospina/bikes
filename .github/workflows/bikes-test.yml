@@ -238,28 +238,24 @@ jobs:
             - name: Create script for database user
               run: |
                 cat <<'EOF' > inline_script.sql
-                :setvar databaseUserName ""
-                :setvar databaseUserPassword ""
 
                 DECLARE @sqlCommand VARCHAR(4096);
-                DECLARE @databaseUserName VARCHAR(4096) = '$(databaseUserName)';
-                DECLARE @databaseUserPassword VARCHAR(4096) = '$(databaseUserPassword)';
                 
-                IF NOT EXISTS (SELECT TOP 1 * FROM sys.database_principals WHERE NAME = @databaseUserName)
+                IF NOT EXISTS (SELECT TOP 1 * FROM sys.database_principals WHERE NAME = '$(databaseUserName)')
                 BEGIN
-                  SET @sqlCommand = 'CREATE USER [' + @databaseUserName + '] WITH PASSWORD = ''' + @databaseUserPassword + ''''
+                  SET @sqlCommand = 'CREATE USER [' + $(databaseUserName) + '] WITH PASSWORD = ''' + $(databaseUserPassword) + ''''
                   PRINT @sqlCommand
                   EXEC (@sqlCommand)
                 
-                  SET @sqlCommand = 'GRANT EXEC TO [' + @databaseUserName + ']';
+                  SET @sqlCommand = 'GRANT EXEC TO [' + $(databaseUserName) + ']';
                   PRINT @sqlCommand
                   EXEC (@sqlCommand)
                     
-                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datawriter, ''' + @databaseUserName + '''';
+                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datawriter, ''' + $(databaseUserName) + '''';
                   PRINT @sqlCommand
                   EXEC (@sqlCommand)
                 
-                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datareader, ''' + @databaseUserName + '''';
+                  SET @sqlCommand = 'EXECUTE sp_addrolemember db_datareader, ''' + $(databaseUserName) + '''';
                   PRINT @sqlCommand
                   EXEC (@sqlCommand)
                 END
@@ -270,10 +266,7 @@ jobs:
               with:
                 connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 path: './inline_script.sql'
-                action: 'Run'
-                arguments: >
-                  -v databaseUserName="${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}"
-                  -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}"
+                arguments: '-v databaseUserName="${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}" -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}" -I'
             
             - name: Decrypt storage key
               id: decrypt
