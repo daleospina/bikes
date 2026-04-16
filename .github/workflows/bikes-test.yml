@@ -271,7 +271,10 @@ jobs:
               with:
                 connection-string: ${{ vars.AZURE_SQL_CONNECTION_STRING }}
                 path: './inline_script.sql'
-                arguments: '-v databaseUserName="${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}" -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}" -I'
+                arguments: >
+                  -v databaseUserName="${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }}"
+                  -v databaseUserPassword="${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }}"
+                  -I
             
             - name: Decrypt storage key
               id: decrypt
