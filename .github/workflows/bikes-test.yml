@@ -77,7 +77,7 @@ jobs:
 
             - name: Finish sonar scan
               run: dotnet sonarscanner end \
-                  /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+                      /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
             - name: Bundle database 
               run: | 
