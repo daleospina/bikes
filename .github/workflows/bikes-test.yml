@@ -68,7 +68,7 @@ jobs:
               env:
                 SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
               with:
-                projectBaseDir: ./src
+                projectBaseDir: .
                 args: >
                     -Dsonar.organization=daleospina-gh
                     -Dsonar.projectName=bikes
@@ -179,12 +179,18 @@ jobs:
           id: encrypt
           shell: bash
           run: |
-            SECRET="${{ steps.deploy.outputs.storageKey }}"
-            ENCRYPTED_BASE64=$(echo -n "$SECRET" \
-              | openssl enc -aes-256-cbc -pbkdf2 -salt -k "${{ secrets.ENCRYPTION_PASSWORD }}" \
-              | base64 -w 0)
+            printf %s "${{ steps.deploy.outputs.storageKey }}" > secret.txt
+
+            openssl enc -aes-256-cbc -pbkdf2 -salt \
+              -pass pass:"${{ secrets.ENCRYPTION_PASSWORD }}" \
+              -in secret.txt \
+              -out secret.enc
+            
+            base64 -w 0 secret.enc > secret.b64
+            
+            ENCRYPTED_BASE64=$(cat secret.b64)
+            
             echo "secret=$ENCRYPTED_BASE64" >> "$GITHUB_OUTPUT"
-        
         outputs:
             appHostName: ${{ steps.deploy.outputs.appHostName }}
             apiHostName: ${{ steps.deploy.outputs.apiHostName }}
@@ -247,7 +253,6 @@ jobs:
                 BEGIN
                     -- Crear el usuario (usando QUOTENAME para evitar inyección SQL)
                     SET @sqlCommand = 'CREATE USER ' + QUOTENAME(@user) + ' WITH PASSWORD = ''' + REPLACE(@pass, '''', '''''') + '''';
-                    PRINT 'Ejecutando: ' + @sqlCommand;
                     EXEC sp_executesql @sqlCommand;
 
                     -- Asignar permisos de ejecución
@@ -257,12 +262,6 @@ jobs:
                     -- Agregar a roles
                     EXEC sp_addrolemember 'db_datawriter', @user;
                     EXEC sp_addrolemember 'db_datareader', @user;
-                    
-                    PRINT 'Usuario ' + @user + ' creado con éxito.';
-                END
-                ELSE
-                BEGIN
-                    PRINT 'El usuario ' + @user + ' ya existe.';
                 END
                 EOF
 
@@ -276,10 +275,17 @@ jobs:
               id: decrypt
               shell: bash
               run: |
-                echo "${{ needs.deploy-infra.outputs.storageKey }}" | base64 -d > secret.enc
-                SECRET=$(openssl enc -aes-256-cbc -pbkdf2 -d -salt \
+                printf %s "${{ needs.deploy-infra.outputs.storageKey }}" > secret.b64
+
+                base64 -d secret.b64 > secret.enc
+                
+                openssl enc -d -aes-256-cbc -pbkdf2 -salt 
+                  -pass pass:"${{ secrets.ENCRYPTION_PASSWORD }}" \
                   -in secret.enc \
-                  -k "${{ secrets.ENCRYPTION_PASSWORD }}")
+                  -out secret.txt
+                
+                SECRET=$(cat secret.txt)
+
                 echo "accountKey=$SECRET" >> "$GITHUB_OUTPUT"
 
             - name: Setup connection string
@@ -400,8 +406,8 @@ jobs:
           with:
             urls: |
                 ${{ needs.deploy-solution.outputs.webAppURL }}
-                
-            uploadArtifacts: true # save results as an action artifacts
+                ${{ needs.deploy-solution.outputs.webAppURL }}/Bikes
+            uploadArtifacts: true
 
         - name: ZAP scan
           uses: zaproxy/action-baseline@v0.15.0
