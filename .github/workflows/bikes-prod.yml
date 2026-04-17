@@ -1,4 +1,4 @@
-name: Bikes Test
+name: Bikes Prod
 
 on:
   workflow_dispatch:
@@ -233,7 +233,7 @@ jobs:
               run: |
                 az sql server firewall-rule create \
                   --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                  --server ${{ needs.deploy-infra.outputs.sqlServerName }} \
+                  --server ${{ needs.deploy-infra-to-test.outputs.sqlServerName }} \
                   --name github-runner \
                   --start-ip-address 0.0.0.0 \
                   --end-ip-address 0.0.0.0
@@ -280,7 +280,7 @@ jobs:
               id: decrypt
               shell: bash
               run: |
-                printf %s "${{ needs.deploy-infra.outputs.storageKey }}" > secret.b64
+                printf %s "${{ needs.deploy-infra-to-test.outputs.storageKey }}" > secret.b64
 
                 base64 -d secret.b64 > secret.enc
                 
@@ -296,21 +296,21 @@ jobs:
             - name: Setup connection string
               shell: bash
               run: |
-                    echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }};Password=${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
-                    echo "STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=${{ needs.deploy-infra.outputs.storageName }};AccountKey=${{ steps.decrypt.outputs.accountKey }};EndpointSuffix=${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
-                    echo "STORAGE_FILE_SERVICE_URL=https://${{ needs.deploy-infra.outputs.storageName }}.file.${{ needs.deploy-infra.outputs.storageEnvironment }}" >> $GITHUB_ENV
+                    echo "SQL_CONNECTION_STRING=Server=tcp:${{ needs.deploy-infra-to-test.outputs.sqlServerFQDN }},1433;Initial Catalog=${{ needs.deploy-infra-to-test.outputs.sqlDatabaseName }};Persist Security Info=False;User ID=${{ vars.SQL_DATABASE_CONTRIBUTOR_USER }};Password=${{ vars.SQL_DATABASE_CONTRIBUTOR_PASSWORD }};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;" >> $GITHUB_ENV
+                    echo "STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=${{ needs.deploy-infra-to-test.outputs.storageName }};AccountKey=${{ steps.decrypt.outputs.accountKey }};EndpointSuffix=${{ needs.deploy-infra-to-test.outputs.storageEnvironment }}" >> $GITHUB_ENV
+                    echo "STORAGE_FILE_SERVICE_URL=https://${{ needs.deploy-infra-to-test.outputs.storageName }}.file.${{ needs.deploy-infra-to-test.outputs.storageEnvironment }}" >> $GITHUB_ENV
 
             - name: Deploy api
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
-                app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
+                app-name: ${{ needs.deploy-infra-to-test.outputs.apiHostName }}
                 package: ./artifacts/site/api.zip
 
             - name: Update api service settings
               uses: Azure/appservice-settings@v1
               with:
-                app-name: ${{ needs.deploy-infra.outputs.apiHostName }}
+                app-name: ${{ needs.deploy-infra-to-test.outputs.apiHostName }}
                 app-settings-json: |
                                   [
                                     { 
@@ -320,7 +320,7 @@ jobs:
                                     },
                                     { 
                                       "name": "AzureStorage__fileShareName", 
-                                      "value": "${{ needs.deploy-infra.outputs.storageFileShareName }}", 
+                                      "value": "${{ needs.deploy-infra-to-test.outputs.storageFileShareName }}", 
                                       "slotSetting": false 
                                     }
                                   ]
@@ -344,13 +344,13 @@ jobs:
               uses: azure/webapps-deploy@v3
               with:
                 resource-group-name: ${{ vars.AZURE_RESOURCEGROUP_NAME }}
-                app-name: ${{ needs.deploy-infra.outputs.appHostName }}
+                app-name: ${{ needs.deploy-infra-to-test.outputs.appHostName }}
                 package: ./artifacts/site/app.zip
 
             - name: Update app service settings
               uses: Azure/appservice-settings@v1
               with:
-                app-name: ${{ needs.deploy-infra.outputs.appHostName }}
+                app-name: ${{ needs.deploy-infra-to-test.outputs.appHostName }}
                 app-settings-json: |
                                   [
                                     { 
@@ -360,7 +360,7 @@ jobs:
                                     },
                                     { 
                                       "name": "AzureStorage__fileShareName", 
-                                      "value": "${{ needs.deploy-infra.outputs.storageFileShareName }}", 
+                                      "value": "${{ needs.deploy-infra-to-test.outputs.storageFileShareName }}", 
                                       "slotSetting": false 
                                     }
                                   ]
@@ -385,12 +385,12 @@ jobs:
               run: |
                 az sql server firewall-rule delete \
                   --resource-group ${{ vars.AZURE_RESOURCEGROUP_NAME }} \
-                  --server ${{ needs.deploy-infra.outputs.sqlServerName }} \
+                  --server ${{ needs.deploy-infra-to-test.outputs.sqlServerName }} \
                   --name github-runner
         
         outputs:
-          webApiURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.apiHostName) }}
-          webAppURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra.outputs.appHostName) }}
+          webApiURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra-to-test.outputs.apiHostName) }}
+          webAppURL: ${{ format('https://{0}.azurewebsites.net', needs.deploy-infra-to-test.outputs.appHostName) }}
 
     scan-solution-in-test:
         runs-on: ubuntu-latest
@@ -399,7 +399,7 @@ jobs:
         
         - name: Smoke test
           run: |
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ needs.deploy-solution.outputs.webAppURL }})
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ needs.deploy-solution-to-test.outputs.webAppURL }})
             if [ $STATUS -ne 200 ]; then
               echo "Smoke test failed with status $STATUS"
               exit 1
@@ -410,14 +410,14 @@ jobs:
           uses: treosh/lighthouse-ci-action@v12
           with:
             urls: |
-                ${{ needs.deploy-solution.outputs.webAppURL }}
-                ${{ needs.deploy-solution.outputs.webAppURL }}/Bikes
+                ${{ needs.deploy-solution-to-test.outputs.webAppURL }}
+                ${{ needs.deploy-solution-to-test.outputs.webAppURL }}/Bikes
             uploadArtifacts: true
 
         - name: ZAP scan
           uses: zaproxy/action-baseline@v0.15.0
           with:
-            target: ${{ needs.deploy-solution.outputs.webAppURL }}
+            target: ${{ needs.deploy-solution-to-test.outputs.webAppURL }}
             allow_issue_writing: false
 
     deploy-infra-to-prod:
